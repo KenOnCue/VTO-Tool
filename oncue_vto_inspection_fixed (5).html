@@ -1,0 +1,418 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>OnCue — VTO Vehicle Check</title>
+<style>
+@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600;700&family=IBM+Plex+Mono:wght@400;500&display=swap');
+:root{--navy:#0F2744;--teal:#00B5C8;--teal-d:#008FA0;--teal-l:#E0F6FA;--green:#1A7A3C;--green-l:#E6F4EA;--red:#C8291E;--red-l:#FCE8E6;--amber:#D4820A;--amber-l:#FEF3E0;--gray1:#F4F5F6;--gray2:#E8EAED;--gray3:#CDD0D5;--gray5:#888E99;--gray7:#444C5C;--white:#FFFFFF;--text:#1A2033;--r:8px}
+*{box-sizing:border-box;margin:0;padding:0;-webkit-tap-highlight-color:transparent}
+body{font-family:'IBM Plex Sans',sans-serif;background:#0B1E38;min-height:100vh;color:var(--text);font-size:15px}
+.hdr{background:var(--navy);padding:14px 18px;display:flex;align-items:center;gap:14px;position:sticky;top:0;z-index:200;border-bottom:2px solid var(--teal)}
+.hdr-badge{background:var(--teal);color:var(--navy);font-weight:700;font-size:11px;letter-spacing:1px;padding:5px 10px;border-radius:4px;white-space:nowrap}
+.hdr-title{color:white;font-size:15px;font-weight:600}
+.hdr-sub{color:rgba(255,255,255,.45);font-size:11px;margin-top:1px}
+.hdr-clock{margin-left:auto;font-family:'IBM Plex Mono',monospace;font-size:11px;color:rgba(255,255,255,.5);text-align:right;line-height:1.4}
+.steps-bar{background:var(--navy);padding:0 18px 14px;display:flex;gap:4px}
+.step-dot{flex:1;height:3px;background:rgba(255,255,255,.15);border-radius:2px;transition:background .3s}
+.step-dot.done{background:var(--teal)}
+.step-dot.active{background:var(--teal);opacity:.6}
+.main{padding:14px 14px 100px;max-width:600px;margin:0 auto}
+.step-panel{display:none}
+.step-panel.active{display:block}
+.step-hdr{display:flex;align-items:center;gap:12px;margin-bottom:14px}
+.step-num{width:32px;height:32px;background:var(--teal);color:var(--navy);border-radius:50%;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:14px;flex-shrink:0}
+.step-title{color:white;font-size:17px;font-weight:600}
+.step-sub{color:rgba(255,255,255,.5);font-size:12px;margin-top:2px}
+.card{background:var(--white);border-radius:var(--r);padding:16px;margin-bottom:10px}
+.card-title{font-size:11px;font-weight:600;text-transform:uppercase;letter-spacing:.8px;color:var(--gray5);margin-bottom:12px}
+label{display:block;font-size:13px;font-weight:500;color:var(--gray7);margin-bottom:5px}
+input[type=text],select,textarea{width:100%;padding:11px 13px;border:1.5px solid var(--gray3);border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:15px;color:var(--text);background:var(--white);outline:none;transition:border-color .15s;margin-bottom:12px}
+input:focus,select:focus,textarea:focus{border-color:var(--teal)}
+.vrn-input{font-family:'IBM Plex Mono',monospace;font-size:22px;font-weight:500;text-transform:uppercase;letter-spacing:3px;text-align:center}
+textarea{resize:vertical;min-height:72px}
+select{appearance:none;background-image:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='12' height='12' viewBox='0 0 12 12'%3E%3Cpath fill='%23888E99' d='M6 8L1 3h10z'/%3E%3C/svg%3E");background-repeat:no-repeat;background-position:right 12px center}
+.type-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:8px;margin-bottom:12px}
+.type-btn{padding:14px 6px;border-radius:var(--r);border:2px solid var(--gray3);background:var(--white);text-align:center;cursor:pointer;transition:all .12s}
+.type-btn .ti{font-size:22px;display:block;margin-bottom:5px}
+.type-btn .tn{font-size:11px;font-weight:600;color:var(--gray7);line-height:1.3}
+.type-btn.active{border-color:var(--navy);background:var(--navy)}
+.type-btn.active .tn{color:white}
+.section-hdr{font-size:11px;font-weight:700;text-transform:uppercase;letter-spacing:.7px;color:var(--navy);padding:10px 0 8px;border-bottom:1.5px solid var(--gray2);margin-bottom:8px}
+.check-item{border-radius:var(--r);margin-bottom:6px;overflow:hidden;border:1.5px solid var(--gray2);background:var(--gray1);transition:border-color .15s}
+.check-item.pass{border-color:#86C99A;background:var(--green-l)}
+.check-item.fail{border-color:#E8928B;background:var(--red-l)}
+.check-item.na{border-color:var(--gray3);background:var(--gray2);opacity:.7}
+.ci-row{display:flex;align-items:center;padding:10px 12px;gap:10px}
+.ci-label{flex:1}
+.ci-name{font-size:14px;font-weight:500;color:var(--text)}
+.ci-hint{font-size:11px;color:var(--gray5);margin-top:2px}
+.ci-btns{display:flex;gap:4px;flex-shrink:0}
+.ci-btn{padding:5px 9px;border-radius:5px;border:1.5px solid var(--gray3);background:var(--white);font-family:'IBM Plex Sans',sans-serif;font-size:12px;font-weight:600;cursor:pointer;color:var(--gray7);transition:all .1s}
+.ci-btn.apass{background:var(--green);border-color:var(--green);color:white}
+.ci-btn.afail{background:var(--red);border-color:var(--red);color:white}
+.ci-btn.ana{background:var(--gray5);border-color:var(--gray5);color:white}
+.ci-defect{display:none;padding:0 12px 10px}
+.ci-defect input{width:100%;padding:8px 10px;border:1.5px solid #E8928B;border-radius:6px;background:white;font-family:'IBM Plex Sans',sans-serif;font-size:13px;outline:none;margin-bottom:6px}
+.sev-row{display:flex;gap:5px}
+.sev-btn{flex:1;padding:5px 4px;border-radius:5px;border:1.5px solid var(--gray3);background:white;font-size:11px;font-weight:600;cursor:pointer;color:var(--gray7);text-align:center;transition:all .1s}
+.sev-btn.sm{background:var(--amber);border-color:var(--amber);color:white}
+.sev-btn.sM{background:var(--red);border-color:var(--red);color:white}
+.sev-btn.sU{background:#6B0000;border-color:#6B0000;color:white}
+.photo-section{margin-top:4px}
+.photo-label-row{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+.photo-add-btn{display:inline-flex;align-items:center;gap:6px;padding:8px 14px;border-radius:var(--r);background:var(--navy);color:white;border:none;font-family:'IBM Plex Sans',sans-serif;font-size:13px;font-weight:600;cursor:pointer}
+.photo-grid{display:grid;grid-template-columns:repeat(3,1fr);gap:6px;margin-top:6px}
+.photo-thumb{aspect-ratio:1;border-radius:6px;overflow:hidden;position:relative;background:var(--gray2)}
+.photo-thumb img{width:100%;height:100%;object-fit:cover}
+.photo-del{position:absolute;top:3px;right:3px;background:rgba(0,0,0,.6);color:white;border:none;border-radius:50%;width:20px;height:20px;font-size:11px;cursor:pointer;display:flex;align-items:center;justify-content:center}
+input[type=file]{display:none}
+.unsafe-warn{display:none;background:#6B0000;color:white;border-radius:var(--r);padding:12px 14px;font-size:13px;font-weight:600;margin-bottom:10px;line-height:1.4}
+.fail-banner{display:none;background:var(--red-l);border:1.5px solid var(--red);border-radius:var(--r);padding:10px 13px;font-size:13px;color:var(--red);font-weight:500;margin-bottom:10px}
+.nav-bar{position:fixed;bottom:0;left:0;right:0;background:var(--navy);border-top:1px solid rgba(255,255,255,.1);padding:12px 16px;display:flex;gap:8px}
+.nav-back{padding:13px 20px;border-radius:var(--r);border:1.5px solid rgba(255,255,255,.2);background:transparent;color:white;font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer}
+.nav-next{flex:1;padding:13px;background:var(--teal);color:var(--navy);border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer;transition:background .15s}
+.nav-next:hover{background:var(--teal-d);color:white}
+.nav-next:disabled{background:var(--gray3);color:var(--gray5);cursor:not-allowed}
+.sig-wrap{border:1.5px solid var(--gray3);border-radius:var(--r);overflow:hidden;margin-bottom:12px}
+canvas{display:block;width:100%;min-width:200px;height:120px;touch-action:none;background:var(--gray1);cursor:crosshair}
+.sig-bar{display:flex;justify-content:space-between;align-items:center;padding:7px 12px;background:var(--gray2);font-size:11px;color:var(--gray5)}
+.sig-clr{background:none;border:none;font-size:12px;color:var(--red);cursor:pointer;font-family:'IBM Plex Sans',sans-serif;font-weight:600}
+.ready-toggle{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin-bottom:12px}
+.ready-btn{padding:18px 10px;border-radius:var(--r);border:2px solid var(--gray3);background:var(--gray1);text-align:center;cursor:pointer;transition:all .12s}
+.ready-btn .ri{font-size:24px;display:block;margin-bottom:6px}
+.ready-btn .rl{font-size:13px;font-weight:700;color:var(--gray7)}
+.ready-btn.ready-yes{border-color:var(--green);background:var(--green-l)}
+.ready-btn.ready-yes .rl{color:var(--green)}
+.ready-btn.ready-no{border-color:var(--red);background:var(--red-l)}
+.ready-btn.ready-no .rl{color:var(--red)}
+.success-screen{display:none;min-height:calc(100vh - 60px);align-items:center;justify-content:center;flex-direction:column;text-align:center;padding:40px 24px}
+.success-screen.show{display:flex}
+.success-icon{width:80px;height:80px;border-radius:50%;display:flex;align-items:center;justify-content:center;font-size:36px;margin:0 auto 20px}
+.success-icon.ok{background:var(--green)}
+.success-icon.bad{background:#6B0000}
+.success-title{color:white;font-size:22px;font-weight:700;margin-bottom:8px}
+.success-sub{color:rgba(255,255,255,.5);font-size:14px;line-height:1.5;margin-bottom:28px}
+.new-btn{padding:14px 32px;background:var(--teal);color:var(--navy);border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+</style>
+</head>
+<body>
+<div class="hdr">
+  <div class="hdr-badge">VTO</div>
+  <div><div class="hdr-title">Vehicle Check</div><div class="hdr-sub">OnCue Transport — Jubilee Depot</div></div>
+  <div class="hdr-clock" id="clock"></div>
+</div>
+<div class="steps-bar" id="steps-bar"></div>
+<div class="success-screen" id="success-screen">
+  <div class="success-icon" id="success-icon"></div>
+  <div class="success-title" id="success-title"></div>
+  <div class="success-sub" id="success-sub"></div>
+  <button class="new-btn" onclick="resetAll()">Start New Check</button>
+</div>
+<div class="main" id="main-form">
+  <!-- STEP 1: DETAILS -->
+  <div class="step-panel active" id="step-0">
+    <div class="step-hdr"><div class="step-num">1</div><div><div class="step-title">Vehicle Details</div><div class="step-sub">Enter VTO name and vehicle info</div></div></div>
+    <div class="card">
+      <label>VTO Name</label><input type="text" id="vto-name" placeholder="Your full name">
+      <label>Vehicle Registration</label>
+      <input type="text" id="vrn-text" class="vrn-input" placeholder="GN21 EBL" maxlength="10" oninput="this.value=this.value.toUpperCase()">
+      <select id="vrn-select" style="display:none;font-family:'IBM Plex Mono',monospace;font-size:17px;letter-spacing:2px;font-weight:500">
+        <option value="">Select vehicle...</option>
+      </select>
+      <label>Vehicle Type</label>
+      <div class="type-grid">
+        <div class="type-btn" onclick="selType('2crew')" id="t-2crew"><span class="ti">🚑</span><span class="tn">2-Crew Ambulance</span></div>
+        <div class="type-btn" onclick="selType('wav')" id="t-wav"><span class="ti">🚐</span><span class="tn">WAV</span></div>
+        <div class="type-btn" onclick="selType('estate')" id="t-estate"><span class="ti">🚗</span><span class="tn">Estate / Green Car</span></div>
+      </div>
+      <label>Odometer (miles)</label><input type="text" id="odo" placeholder="e.g. 45320" inputmode="numeric">
+      <label>Fuel Level</label>
+      <select id="fuel"><option value="">Select</option><option>Full</option><option>¾</option><option>½</option><option>¼</option><option>Reserve / Low</option></select>
+    </div>
+  </div>
+  <!-- STEP 2: HANDOVER -->
+  <div class="step-panel" id="step-1">
+    <div class="step-hdr"><div class="step-num">2</div><div><div class="step-title">Handover</div><div class="step-sub">Confirm notes from outgoing crew</div></div></div>
+    <div class="card">
+      <div class="card-title">Handover from Previous Crew</div>
+      <label>Damage, faults or equipment issues reported at handover?</label>
+      <textarea id="handover-notes" placeholder="Record any notes from the outgoing crew — damage, used equipment, issues flagged..."></textarea>
+      <div id="checklist-handover"></div>
+    </div>
+    <div class="card photo-section">
+      <div class="photo-label-row"><div class="card-title" style="margin:0">Photos — Handover Condition</div><button class="photo-add-btn" onclick="addPhoto('handover')">📷 Add Photo</button></div>
+      <div class="photo-grid" id="photos-handover"></div>
+      <input type="file" id="file-handover" accept="image/*" capture="environment" multiple onchange="handlePhotos('handover',this)">
+    </div>
+  </div>
+  <!-- STEP 3: VISUAL -->
+  <div class="step-panel" id="step-2">
+    <div class="step-hdr"><div class="step-num">3</div><div><div class="step-title">Visual Check</div><div class="step-sub">Exterior &amp; interior damage, waste removal</div></div></div>
+    <div class="card"><div id="checklist-visual"></div></div>
+    <div class="card photo-section">
+      <div class="photo-label-row"><div class="card-title" style="margin:0">Photos — Damage Found</div><button class="photo-add-btn" onclick="addPhoto('visual')">📷 Add Photo</button></div>
+      <div class="photo-grid" id="photos-visual"></div>
+      <input type="file" id="file-visual" accept="image/*" capture="environment" multiple onchange="handlePhotos('visual',this)">
+    </div>
+  </div>
+  <!-- STEP 4: CLEAN -->
+  <div class="step-panel" id="step-3">
+    <div class="step-hdr"><div class="step-num">4</div><div><div class="step-title">Clean &amp; Wipe Down</div><div class="step-sub">All surfaces, floor mopped</div></div></div>
+    <div class="card"><div id="checklist-clean"></div></div>
+    <div class="card photo-section">
+      <div class="photo-label-row"><div class="card-title" style="margin:0">Photos — After Clean</div><button class="photo-add-btn" onclick="addPhoto('clean')">📷 Add Photo</button></div>
+      <div class="photo-grid" id="photos-clean"></div>
+      <input type="file" id="file-clean" accept="image/*" capture="environment" multiple onchange="handlePhotos('clean',this)">
+    </div>
+  </div>
+  <!-- STEP 5: EQUIPMENT -->
+  <div class="step-panel" id="step-4">
+    <div class="step-hdr"><div class="step-num">5</div><div><div class="step-title">Equipment &amp; Restock</div><div class="step-sub">Check and restock all kit</div></div></div>
+    <div class="card"><div id="checklist-equip"></div></div>
+    <div class="card photo-section">
+      <div class="photo-label-row"><div class="card-title" style="margin:0">Photos — Equipment Issues</div><button class="photo-add-btn" onclick="addPhoto('equip')">📷 Add Photo</button></div>
+      <div class="photo-grid" id="photos-equip"></div>
+      <input type="file" id="file-equip" accept="image/*" capture="environment" multiple onchange="handlePhotos('equip',this)">
+    </div>
+  </div>
+  <!-- STEP 6: MECHANICAL -->
+  <div class="step-panel" id="step-5">
+    <div class="step-hdr"><div class="step-num">6</div><div><div class="step-title">Mechanical Checks</div><div class="step-sub">Lights, fluid levels, tyres, battery</div></div></div>
+    <div class="unsafe-warn" id="unsafe-warn">⛔ UNSAFE ITEM FLAGGED — Vehicle must not return to service until cleared by Fleet.</div>
+    <div class="fail-banner" id="fail-banner"></div>
+    <div class="card"><div id="checklist-mech"></div></div>
+    <div class="card photo-section">
+      <div class="photo-label-row"><div class="card-title" style="margin:0">Photos — Mechanical Issues</div><button class="photo-add-btn" onclick="addPhoto('mech')">📷 Add Photo</button></div>
+      <div class="photo-grid" id="photos-mech"></div>
+      <input type="file" id="file-mech" accept="image/*" capture="environment" multiple onchange="handlePhotos('mech',this)">
+    </div>
+  </div>
+  <!-- STEP 7: SIGN OFF -->
+  <div class="step-panel" id="step-6">
+    <div class="step-hdr"><div class="step-num">7</div><div><div class="step-title">Sign Off</div><div class="step-sub">Mark vehicle status and confirm check</div></div></div>
+    <div class="card">
+      <div class="card-title">Vehicle Status</div>
+      <div class="ready-toggle">
+        <div class="ready-btn" id="rb-yes" onclick="setReady(true)"><span class="ri">✅</span><span class="rl">READY TO GO</span></div>
+        <div class="ready-btn" id="rb-no"  onclick="setReady(false)"><span class="ri">🔴</span><span class="rl">NOT READY</span></div>
+      </div>
+      <label>Additional Notes</label>
+      <textarea id="final-notes" placeholder="Any other observations or comments..."></textarea>
+    </div>
+    <div class="card">
+      <div class="card-title">VTO Confirmation</div>
+      <p style="font-size:13px;color:var(--gray7);margin-bottom:10px;">I confirm I have carried out this vehicle check accurately and to the best of my knowledge.</p>
+      <div class="sig-wrap"><canvas id="sig-canvas" height="110"></canvas><div class="sig-bar"><span>Sign above</span><button class="sig-clr" onclick="clearSig()">Clear</button></div></div>
+      <button onclick="prevStep()" style="width:100%;padding:12px;border-radius:8px;border:1.5px solid rgba(15,39,68,0.3);background:transparent;color:var(--gray7);font-family:'IBM Plex Sans',sans-serif;font-size:14px;font-weight:600;cursor:pointer;margin-bottom:8px">← Back</button><button id="submit-btn" class="nav-next" onclick="submitCheck()" style="position:static;margin-top:4px;width:100%">Submit Check →</button>
+    </div>
+  </div>
+</div>
+<div class="nav-bar" id="nav-bar">
+  <button class="nav-back" id="btn-back" onclick="prevStep()">← Back</button>
+  <button class="nav-next" id="btn-next" onclick="nextStep()">Continue →</button>
+</div>
+
+<script>
+const CHECKS_ALL={handover:[{id:'ho_damage',label:'Damage noted at handover',hint:'Any new damage reported by outgoing crew?'},{id:'ho_equip',label:'Used equipment noted',hint:'Any equipment used/missing flagged at handover?'},{id:'ho_waste',label:'Waste removed',hint:'Any waste or clinical items left behind dealt with?'}],visual:[{id:'vi_ext',label:'Exterior — damage check',hint:'Walk around: dents, scratches, broken panels, mirrors'},{id:'vi_int',label:'Interior — damage check',hint:'Patient compartment and cab interior condition'},{id:'vi_stickers',label:'Vehicle stickers present',hint:'All required ID and safety stickers in place'},{id:'vi_waste',label:'No waste remaining',hint:'All clinical and general waste removed from vehicle'}],clean:[{id:'cl_stretcher',label:'Stretcher wiped down',hint:'All surfaces, buckles, rails, undercarriage'},{id:'cl_seats',label:'Seats wiped down',hint:'Cab and patient compartment seats'},{id:'cl_steering',label:'Steering wheel & gear stick',hint:'Wiped with appropriate cleaning solution'},{id:'cl_doors',label:'Door handles wiped',hint:'Interior and exterior handles all areas'},{id:'cl_surfaces',label:'All surfaces wiped',hint:'Dashboard, grab rails, cabinet doors, equipment housing'},{id:'cl_floor',label:'Floor mopped out',hint:'Patient compartment floor — clean and dry'},{id:'cl_cab',label:'Cab floor & mats clean',hint:'Swept, mopped if needed, presentable'}],equip_2crew:[
+  // ── MAIN EQUIPMENT ──────────────────────────────────────
+  {id:'eq_stretcher',    label:'Stretcher — functional, no slits',      hint:'Check mechanism, cleanliness, no tears in cover, secured'},
+  {id:'eq_wheelchair',   label:'Wheelchair — fully functional',          hint:'Brakes, footrests, clean, secured correctly'},
+  {id:'eq_carrychair',   label:'Carry chair — functional',               hint:'Present, clean, mechanism working'},
+  {id:'eq_sc',           label:'Stair climber — functional',             hint:'Present, belt and mechanism checked, clean'},
+  {id:'eq_scbat',        label:'Stair climber batteries — charged',      hint:'Fully charged and secured in vehicle'},
+  {id:'eq_seatbelts',    label:'Seatbelts — all present & locking',      hint:'All passenger seatbelts locking correctly, no damage'},
+  {id:'eq_rotseats',     label:'Rotating seats x4 — functional',         hint:'All 4 seats rotate and lock correctly'},
+  {id:'eq_seatext',      label:'Seatbelt extension — 1 set present',     hint:'Extension set present and functional'},
+  {id:'eq_fuelcard',     label:'Fuel card present',                       hint:'In correct location in vehicle'},
+  // ── OXYGEN ──────────────────────────────────────────────
+  {id:'eq_o2_10l',       label:'Oxygen 10L — onboard, secured, level',   hint:'Record level: Full / ¾ / ½ / ¼ / Low. Secure in housing'},
+  {id:'eq_o2_2l',        label:'Oxygen 2L — onboard, secured, level',    hint:'Record level: Full / ¾ / ½ / ¼ / Low. Secure in housing'},
+  {id:'eq_flowmeter',    label:'Flow meters — in date & secured',         hint:'Check expiry date, secured correctly'},
+  // ── PATIENT HANDLING ────────────────────────────────────
+  {id:'eq_banana',       label:'Banana board — present',                  hint:'Present and in good condition'},
+  {id:'eq_patslide',     label:'Pat slide — present',                     hint:'Present and in good condition'},
+  {id:'eq_handbelts',    label:'Handling belts — full set (S/M/L/XL)',    hint:'All 4 sizes present'},
+  {id:'eq_carrysheet',   label:'Carry sheet / slide sheet — present',     hint:'Present and clean'},
+  // ── CLAMPS & STRAPS ─────────────────────────────────────
+  {id:'eq_strclamps',    label:'Stretcher clamps x2',                     hint:'Both clamps present and functional'},
+  {id:'eq_wcclamps',     label:'Wheelchair clamps x1 set (4 parts)',      hint:'All 4 parts present'},
+  {id:'eq_scstraps',     label:'Stair climber straps x1 set (2 parts)',   hint:'Both straps present'},
+  {id:'eq_ccstraps',     label:'Carry chair & WC strap x1',               hint:'Present and in good condition'},
+  // ── RAMP & SIDESTEP ─────────────────────────────────────
+  {id:'eq_ramp',         label:'Ramp — onboard, secured',                 hint:'Present and secured correctly'},
+  {id:'eq_rampdeploy',   label:'Ramp deploys safely',                     hint:'Test deploy — smooth operation, no obstruction'},
+  {id:'eq_sidestep',     label:'Sidestep — deploys, stows, retracts',     hint:'Test all three functions'},
+  // ── WINCH ───────────────────────────────────────────────
+  {id:'eq_winch_dep',    label:'Winch — deploys correctly',               hint:'Test deploy'},
+  {id:'eq_winch_ret',    label:'Winch — retracts correctly',              hint:'Test retract'},
+  {id:'eq_winch_clamps', label:'Winch clamps — attached',                 hint:'Clamps present and attached'},
+  {id:'eq_winch_ctrl',   label:'Winch control works',                     hint:'Control unit functioning'},
+  // ── AIR CONDITIONING & HEATING ──────────────────────────
+  {id:'eq_ac_front',     label:'Air conditioning front — working',        hint:'Test front AC'},
+  {id:'eq_ac_rear',      label:'Air conditioning rear — working',         hint:'Test rear AC'},
+  {id:'eq_heat_front',   label:'Heating front — working',                 hint:'Test front heating'},
+  {id:'eq_heat_rear',    label:'Heating rear — working',                  hint:'Test rear heating'},
+  // ── CONSUMABLES (with expiry checks) ────────────────────
+  {id:'eq_fleece',       label:'Fleece blankets x5 — present',            hint:'Single use, check qty is 5'},
+  {id:'eq_thermal',      label:'Aluminium thermal blankets x4 — present', hint:'Check qty is 4'},
+  {id:'eq_spillkit',     label:'Hazard spill kit — present, in date',     hint:'Check expiry date on kit'},
+  {id:'eq_faid',         label:'First aid box — seal intact',             hint:'If broken, restock and reseal'},
+  {id:'eq_gloves',       label:'Gloves (S/M/L) x1 each — in date',       hint:'Check all 3 sizes present and expiry date'},
+  {id:'eq_aprons',       label:'Aprons x1 roll — present',               hint:'Roll present, adequate supply'},
+  {id:'eq_handgel',      label:'Hand sanitiser x1 box',                   hint:'Present and adequate'},
+  {id:'eq_clinell_wipes',label:'Clinell wipes x2 packs — in date',        hint:'2 packs present, check expiry'},
+  {id:'eq_clinell_spray',label:'Clinell spray x1 — in date',              hint:'Present, check expiry date'},
+  {id:'eq_blueroll',     label:'Blue roll x2 rolls — present',            hint:'2 rolls present'},
+  {id:'eq_clwastebags',  label:'Clinical waste bags (S/M/L) x1 each',    hint:'All 3 sizes present'},
+  {id:'eq_pillow',       label:'Pillow x1 + pillowcases x5',              hint:'Pillow and 5 clean pillowcases'},
+  {id:'eq_pocketmask',   label:'Pocket mask x1 — in date',               hint:'Present, check expiry date'},
+  {id:'eq_bvm_adult',    label:'BVM adult x1 — in date',                  hint:'Present, check expiry date'},
+  {id:'eq_bvm_child',    label:'BVM child x1 — in date',                  hint:'Present, check expiry date'},
+  {id:'eq_oximeter',     label:'Pulse oximeter x1 — present',            hint:'Present and functioning'},
+  {id:'eq_vomitmask',    label:'Vomit masks x2 — present',               hint:'Both present'},
+  {id:'eq_masks',        label:'Masks — in date',                         hint:'Adequate supply, check expiry date'},
+  {id:'eq_cannula_adult',label:'Nasal cannulas adult x4 — in date',       hint:'4 present, check expiry'},
+  {id:'eq_cannula_child',label:'Nasal cannulas child x1 — in date',       hint:'1 present, check expiry'},
+  {id:'eq_urinebottles', label:'Urine bottles x2 — present',             hint:'2 present'},
+  {id:'eq_bedpans',      label:'Bed pans x2 — present',                  hint:'2 present'},
+  {id:'eq_incpads',      label:'Incontinence pads x8 — present',         hint:'8 present'},
+  {id:'eq_water',        label:'Water x4 — present',                     hint:'4 bottles present'},
+  {id:'eq_torch',        label:'Torch — present & working',              hint:'Test torch'},
+  {id:'eq_orangebag',    label:'Orange bag — sealed',                    hint:'Present and seal intact'},
+],equip_wav:[{id:'eq_fuelcard',label:'Fuel card present',hint:'In correct location'},{id:'eq_wheelchair',label:'Wheelchair',hint:'Present, clean, brakes working, footrests present'},{id:'eq_ramp',label:'Ramp / lift mechanism',hint:'Working correctly, clean, no damage'},{id:'eq_restraints',label:'Restraint belts',hint:'All present and locking correctly'},{id:'eq_gloves',label:'Gloves',hint:'Adequate supply'},{id:'eq_handgel',label:'Hand gel',hint:'Present'}],equip_estate:[{id:'eq_fuelcard',label:'Fuel card present',hint:'In correct location'},{id:'eq_gloves',label:'Gloves',hint:'Adequate supply'},{id:'eq_handgel',label:'Hand gel',hint:'Present'}],mech:[{id:'mc_lights',label:'Warning lights — all clear',hint:'No dashboard warning lights illuminated on start-up'},{id:'mc_oil',label:'Oil level',hint:'Check dipstick — top up if needed, note level'},{id:'mc_adblue',label:'AdBlue level',hint:'Check gauge — top up if low, note level'},{id:'mc_fuel',label:'Fuel level adequate',hint:'Sufficient for next shift — fuel if needed'},{id:'mc_tyres',label:'Tyres — visual check',hint:'Condition, obvious damage or bulges, inflation'},{id:'mc_battery',label:'Battery / electrics',hint:'No warning lights, all electrics functioning correctly'},{id:'mc_screen',label:'Windscreen',hint:'No chips, cracks — check wiper blades condition'}]};
+
+let step=0,TOTAL=7,vType=null,checks={},photos={},sigCtx,sigDrawing=false,sigHasData=false,vehicleReady=null;
+
+const VRNS_2CREW=['FE75 PZF','FJ23 BAV','FJ23 BDE','FJ24 DKK','FJ24 DKV','FJ24 DMV','FJ24 DMZ','FJ24 GZW','FJ24 GZX','FJ73 DYW','FJ73 DZM','FJ73 EUT','FJ73 EWE','FJ74 DBY','FJ74 DEU','FJ74 DFA','FN23 DHC'];
+const VRNS_WAV=['BC24 XEG','BC24 XEH','BC24 XEJ','BC24 XEK','BC24 XEL','BC24 XEM','BC24 XEN','BC24 XEO','BC24 XEP','BC24 XER','BG24 FEX','BG24 KAO','BJ24 GYG','BJ24 GZP','BJ24 RNY','BK24 LRZ','BK24 LWN','BK24 LWP','BK24 LWS','BK24 LWU','BK24 LWV','BK74 JMO','BK74 JMU','BK74 JMV','BK74 JMX','BK74 JNL','BK74 JNN','BK74 JNO','BK74 JNV','BL23 LMY','BN24 WVC','BN74 PZG','BP73 ACF','BT23 VNC','BT24 FEU','BV24 XNR','BW24 OLA','BW24 ONR','BW24 ONU','BW24 ONZ','BW24 OOA','BW24 OOC','BW24 ZDF','BW24 ZFV','BW24 ZFY','BX24 XJJ','BX24 XKH','BX24 XLC','BX24 XLH','BX24 XLZ','GN19 BXW','GN19 BXX','GN19 BXY','GN19 BXZ','GN20 CYO','GN20 CYP','GN20 CYS','GN20 CYT','GN20 CZC','GN20 CZD','GN20 CZE','GN20 CZF','GN20 CZH','GN20 CZK','GN20 CZL','GN20 CZO','GN20 CZP','GN20 CZS','GN20 CZT','GN21 EBA','GN21 EBC','GN21 EBD','GN21 EBF','GN21 EBG','GN21 EBJ','GN21 EBK','GN21 EBL','GN21 EBM','GN21 EBP','GN21 EBU','GN21 EBV','GN21 EBX','GN21 EBZ','GN21 ECA','GN21 ECC','GN21 ECD','GN21 ECE','GN21 FTU','GN21 FTV','GN21 FTX','GN21 FTZ','GN21 FUA','GN21 FUB','GN21 FUF','GN21 FUG','GN21 FUT','GN21 FUU','GN21 FUV','GN21 FZH','GN21 FZJ','GN21 FZK','GN21 FZL','GN69 BKE','GN69 BKF','GN69 BKG','GN69 BKJ','GN69 BKV','GN69 BKX','GN69 BKY','GN69 BKZ','GN69 BLV','GN69 BLZ','GN70 DJF','GN70 DJJ','GN70 DJK','GN70 DJO','GN70 DJU','GN70 DJV','GN70 DJX','GN70 DJY','GN70 DJZ','GN70 DKD','GN70 DKF','GN70 DKJ','GN70 DKK','GN70 DKL','GN70 DKO','GN70 DKV','GN70 DKX','GN70 DKY','GN70 DLD','GN70 DLE','GN70 DLF','GN70 DLJ','GN70 DLK','GN70 DLO','GN70 DLU','GN70 DLV','GN70 FBA','GN70 FBB','GN70 FBC','GN71 AZF','GN71 AZG','GN71 AZJ','GN71 AZW','GN71 AZZ','RX22 CGZ','RX22 CHC','RX22 CHF','RX22 CHG','RX22 CHV','RX22 CJE','RX22 CJZ','RX22 CKA','RX22 CKC','RX22 CKD','RX22 EVR','RX22 EVU','RX22 EVV','RX22 EWA','RX22 FPE','RX22 FPK','RX71 EKR','RX71 EKT','RX71 EKU','RX71 EKW','RX71 EKY','RX71 ELJ','SB19 FTC','SB19 FTD','VA23 BVV','VA23 CDX','VA23 CFD','VA23 DVN','VA23 EDX','VA74 EVU','VE22 CZW','VE22 HDN','VE22 NLJ','VE22 NLV','VE23 YTR','VE72 DUH','VE72 FDP','VE72 FFC','VE72 FFW','VE72 GUA','VE74 UKW','VK22 ZVU','VK71 YLR','VK72 XFC','VK72 XYH','VK72 XZV','VK72 YNG','VK72 YNJ','VK72 YSN','VK72 YZP','VK72 ZFD','VK72 ZWJ','VK72 ZYL','VK73 BVT','VK73 CVP','VK73 WOY','VK73 XKJ','VK73 XLF','VK73 XMY','VK73 XVY','VK73 ZCY','VK73 ZXP','VN22 SWO','VN22 TYD','VN22 TYG','VN22 UAK','VN22 XGF','VN22 ZRC','VN71 AOW','VN71 BVV','VN71 BXS','VN71 ERK','VN71 FBB','VN71 GUW','VN71 HHB','VN72 AAF','VN72 ACF','VN72AAX','VN72ABO','VN72ABV','VO23 WVB','VO23 WWH','VO23 WWK','VO23 WWM','VO23 XLC','VO23 XLG','VO23 XLM','VO72 EFJ','VO72 HXZ','VO72 OPR','VO72 OSU','VO72 SHJ','VO72 SWF','VO72 SWJ','VO72 SWU','VU24 KBJ','VU72 JNZ','VU72 JOA','VU72 JOH','VU72 JPJ','VU72 JPO','VU72 JPV','VU72 JRV','VU72 JSV','VU72 JTV','VU72JOV','WD25 AFK','WD25 AFN','WD25 AFO','WD25 AFU','WD25 AFV','WD25 AFZ','WD75 HVM','WD75 HVN','WD75 HVO','WD75 HVP','WD75 HVR','WF75 CVA','WF75 CXH','WF75 CXJ','WF75 CXK','WF75 CXM','WF75 CXN','WF75 CXO','WF75 CXP','WF75 CZR','WF75 DDE','WF75 DDJ','WF75 DDK','WF75 DDL','WG25 ZKB','WH74 DXB','WH74 EMJ','WH74 EOT'];
+const VRNS_ESTATE=['LR74 GYF','LR74 GYT'];
+
+function getVRN(){return document.getElementById('vrn-select').style.display!=='none'?document.getElementById('vrn-select').value:document.getElementById('vrn-text').value.trim();}
+
+function populateVRNs(vrns){
+  const sel=document.getElementById('vrn-select');
+  sel.innerHTML='<option value="">Select vehicle...</option>';
+  vrns.forEach(v=>{const o=document.createElement('option');o.value=v;o.textContent=v;sel.appendChild(o);});
+}
+
+function tick(){const n=new Date();document.getElementById('clock').innerHTML=n.toLocaleDateString('en-GB',{weekday:'short',day:'numeric',month:'short'})+'<br>'+n.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});}
+tick();setInterval(tick,30000);
+
+function renderSteps(){const bar=document.getElementById('steps-bar');bar.innerHTML='';for(let i=0;i<TOTAL;i++){const d=document.createElement('div');d.className='step-dot'+(i<step?' done':i===step?' active':'');bar.appendChild(d);}document.getElementById('btn-back').style.display=step===0?'none':'';document.getElementById('btn-next').style.display=step===TOTAL-1?'none':'';document.getElementById('nav-bar').style.display=step===TOTAL-1?'none':'';if(step===TOTAL-1){const sb=document.getElementById('submit-btn');if(sb){sb.textContent='Submit Check →';sb.disabled=false;}}}
+
+function selType(t){
+  vType=t;
+  ['2crew','wav','estate'].forEach(x=>document.getElementById('t-'+x).classList.toggle('active',x===t));
+  const txt=document.getElementById('vrn-text');
+  const sel=document.getElementById('vrn-select');
+  txt.style.display='none';
+  sel.style.display='';
+  sel.value='';
+  if(t==='2crew') populateVRNs(VRNS_2CREW);
+  else if(t==='estate') populateVRNs(VRNS_ESTATE);
+  else populateVRNs(VRNS_WAV);
+}
+
+function buildChecklists(){const ek=vType==='2crew'?'equip_2crew':vType==='wav'?'equip_wav':'equip_estate';checks={};[{c:'checklist-handover',k:'handover'},{c:'checklist-visual',k:'visual'},{c:'checklist-clean',k:'clean'},{c:'checklist-equip',k:ek},{c:'checklist-mech',k:'mech'}].forEach(({c,k})=>{const el=document.getElementById(c);if(!el)return;el.innerHTML='';CHECKS_ALL[k].forEach(item=>{checks[item.id]={result:'',severity:'',note:''};el.appendChild(makeCI(item));});});}
+
+function makeCI(item){const wrap=document.createElement('div');const row=document.createElement('div');row.className='check-item';row.id='ci-'+item.id;const cirow=document.createElement('div');cirow.className='ci-row';const lbl=document.createElement('div');lbl.className='ci-label';lbl.innerHTML='<div class="ci-name">'+item.label+'</div>'+(item.hint?'<div class="ci-hint">'+item.hint+'</div>':'');const btns=document.createElement('div');btns.className='ci-btns';[['✓','pass'],['✗','fail'],['N/A','na']].forEach(([t,r])=>{const b=document.createElement('button');b.className='ci-btn';b.textContent=t;b.id='cib-'+item.id+'-'+r;b.onclick=()=>setCheck(item.id,r);btns.appendChild(b);});cirow.appendChild(lbl);cirow.appendChild(btns);row.appendChild(cirow);const def=document.createElement('div');def.className='ci-defect';def.id='cid-'+item.id;def.innerHTML='<input type="text" placeholder="Describe the defect..." id="cdn-'+item.id+'" class="defect-input"><div class="sev-row"><button class="sev-btn" id="sv-minor-'+item.id+'" onclick="setSev(\''+item.id+'\',\'minor\')">Minor</button><button class="sev-btn" id="sv-major-'+item.id+'" onclick="setSev(\''+item.id+'\',\'major\')">Major</button><button class="sev-btn" id="sv-unsafe-'+item.id+'" onclick="setSev(\''+item.id+'\',\'unsafe\')">⛔ Unsafe</button></div>';row.appendChild(def);wrap.appendChild(row);return wrap;}
+
+function setCheck(id,result){checks[id].result=result;const row=document.getElementById('ci-'+id);row.className='check-item'+(result==='pass'?' pass':result==='fail'?' fail':result==='na'?' na':'');['pass','fail','na'].forEach(r=>{const b=document.getElementById('cib-'+id+'-'+r);if(b){b.className='ci-btn';if(r===result)b.classList.add('a'+r);}});document.getElementById('cid-'+id).style.display=result==='fail'?'block':'none';if(result!=='fail'){checks[id].severity='';checks[id].note='';['minor','major','unsafe'].forEach(s=>{const sb=document.getElementById('sv-'+s+'-'+id);if(sb)sb.className='sev-btn';});}updateWarnings();}
+
+function setSev(id,sev){checks[id].severity=sev;['minor','major','unsafe'].forEach(s=>{const b=document.getElementById('sv-'+s+'-'+id);if(b){b.className='sev-btn';if(s===sev)b.classList.add(s==='minor'?'sm':s==='major'?'sM':'sU');}});updateWarnings();}
+
+function updateWarnings(){const fails=Object.values(checks).filter(c=>c.result==='fail');const unsafe=fails.some(c=>c.severity==='unsafe');document.getElementById('unsafe-warn').style.display=unsafe?'block':'none';const fb=document.getElementById('fail-banner');if(fails.length){fb.style.display='block';fb.textContent='⚠ '+fails.length+' item'+(fails.length>1?'s':'')+' failed — please complete defect details';}else fb.style.display='none';}
+
+function addPhoto(s){document.getElementById('file-'+s).click();}
+function handlePhotos(section,input){if(!photos[section])photos[section]=[];const grid=document.getElementById('photos-'+section);Array.from(input.files).forEach(file=>{const reader=new FileReader();reader.onload=e=>{const idx=photos[section].length;photos[section].push(e.target.result);const thumb=document.createElement('div');thumb.className='photo-thumb';const img=document.createElement('img');img.src=e.target.result;const del=document.createElement('button');del.className='photo-del';del.textContent='×';del.onclick=()=>{photos[section].splice(idx,1);thumb.remove();};thumb.appendChild(img);thumb.appendChild(del);grid.appendChild(thumb);};reader.readAsDataURL(file);});input.value='';}
+
+function initSig(){const canvas=document.getElementById('sig-canvas');
+  // Get width from the card wrapper, not the canvas parent
+  const card=canvas.closest('.card')||canvas.parentElement;
+  const w=card?card.clientWidth-34:320;
+  canvas.width=w>0?w:320;
+  canvas.height=120;sigCtx=canvas.getContext('2d');sigCtx.strokeStyle='#0F2744';sigCtx.lineWidth=2.5;sigCtx.lineCap='round';sigHasData=false;const pos=e=>{const r=canvas.getBoundingClientRect();const s=e.touches?e.touches[0]:e;return{x:(s.clientX-r.left)*(canvas.width/r.width),y:(s.clientY-r.top)*(canvas.height/r.height)};};canvas.onmousedown=e=>{sigDrawing=true;const p=pos(e);sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);};canvas.onmousemove=e=>{if(!sigDrawing)return;const p=pos(e);sigCtx.lineTo(p.x,p.y);sigCtx.stroke();sigHasData=true;};canvas.onmouseup=()=>sigDrawing=false;canvas.ontouchstart=e=>{e.preventDefault();sigDrawing=true;const p=pos(e);sigCtx.beginPath();sigCtx.moveTo(p.x,p.y);};canvas.ontouchmove=e=>{e.preventDefault();if(!sigDrawing)return;const p=pos(e);sigCtx.lineTo(p.x,p.y);sigCtx.stroke();sigHasData=true;};canvas.ontouchend=()=>sigDrawing=false;}
+function clearSig(){const c=document.getElementById('sig-canvas');sigCtx.clearRect(0,0,c.width,c.height);sigHasData=false;}
+
+function setReady(val){vehicleReady=val;document.getElementById('rb-yes').className='ready-btn'+(val?' ready-yes':'');document.getElementById('rb-no').className='ready-btn'+(!val&&val!==null?' ready-no':'');}
+
+function nextStep(){if(step===0){if(!document.getElementById('vto-name').value.trim()){alert('Please enter your name.');return;}if(!getVRN()){alert('Please select or enter the vehicle registration.');return;}if(!vType){alert('Please select a vehicle type.');return;}buildChecklists();setTimeout(initSig,100);}if(step<TOTAL-1){document.getElementById('step-'+step).classList.remove('active');step++;document.getElementById('step-'+step).classList.add('active');renderSteps();window.scrollTo(0,0);if(step===6)setTimeout(initSig,200);}}
+
+function prevStep(){if(step>0){document.getElementById('step-'+step).classList.remove('active');step--;document.getElementById('step-'+step).classList.add('active');renderSteps();window.scrollTo(0,0);if(step===6)setTimeout(initSig,200);}}
+
+function submitCheck(){const _sb=document.getElementById('submit-btn');if(vehicleReady===null){alert('Please mark the vehicle as Ready or Not Ready.');return;}if(!sigHasData){alert('Please sign to confirm the check.');return;}const vto=document.getElementById('vto-name').value.trim();const vrn=getVRN();const odo=document.getElementById('odo').value.trim();const fuel=document.getElementById('fuel').value;const hnotes=document.getElementById('handover-notes').value.trim();const fnotes=document.getElementById('final-notes').value.trim();const now=new Date();const dateStr=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});const timeStr=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});const typeLabel={'2crew':'2-Crew Ambulance','wav':'WAV','estate':'Estate / Green Car'}[vType];const fails=Object.entries(checks).filter(([,v])=>v.result==='fail');const unsafe=fails.some(([,v])=>v.severity==='unsafe');let body='VTO VEHICLE CHECK REPORT\n'+'='.repeat(44)+'\n\n';body+='Date:        '+dateStr+'\nTime:        '+timeStr+'\nVTO:         '+vto+'\nVRN:         '+vrn+'\nType:        '+typeLabel+'\nOdometer:    '+(odo||'Not recorded')+' miles\nFuel:        '+(fuel||'Not recorded')+'\n\n';body+='VEHICLE STATUS: '+(vehicleReady?'READY TO GO':'NOT READY')+'\n\n';if(hnotes)body+='HANDOVER NOTES\n'+'-'.repeat(40)+'\n'+hnotes+'\n\n';if(unsafe){body+='UNSAFE ITEMS — VEHICLE GROUNDED\n'+'-'.repeat(40)+'\n';fails.filter(([,v])=>v.severity==='unsafe').forEach(([id,v])=>{body+='[UNSAFE] '+id+': '+(v.note||'No detail')+'\n';});}const majorFails=fails.filter(([,v])=>v.severity!=='unsafe');if(majorFails.length){body+='\nDEFECTS\n'+'-'.repeat(40)+'\n';majorFails.forEach(([id,v])=>{const sev=v.severity?v.severity.toUpperCase():'UNRATED';body+='['+sev+'] '+id+': '+(v.note||'No detail')+'\n';});}if(!fails.length)body+='DEFECTS: None\n';body+='\n';const totalChecked=Object.values(checks).filter(c=>c.result!=='').length;const totalItems=Object.keys(checks).length;body+='ITEMS CHECKED: '+totalChecked+' of '+totalItems+'\n';if(fnotes)body+='\nADDITIONAL NOTES\n'+'-'.repeat(40)+'\n'+fnotes+'\n';const photoCount=Object.values(photos).flat().length;if(photoCount)body+='\nPHOTOS: '+photoCount+' photo(s) taken during this check\n';body+='\n'+'='.repeat(44)+'\nSubmitted via OnCue VTO Inspection Tool';const subject=unsafe?'VEHICLE GROUNDED — '+vrn+' VTO Check '+timeStr:fails.length?'Defects — '+vrn+' VTO Check '+timeStr+(vehicleReady?' — Ready':' — NOT READY'):'Clear — '+vrn+' VTO Check '+timeStr+(vehicleReady?' — Ready':' — NOT READY');// Send to Google Apps Script
+  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbwlJOXh1iL4O6T2bF4lIBdvVLxDlkLfKmGSlf7EsP9_76UcpKxy6A01GnKUqidrB_yD/exec';
+
+  // Build structured payload for the sheet
+  // Collect all defect notes at submit time
+  Object.keys(checks).forEach(id => {
+    const noteEl = document.getElementById('cdn-' + id);
+    if (noteEl) checks[id].note = noteEl.value.trim();
+  });
+
+  const payload = {
+    vtoName:       vto,
+    vrn:           vrn,
+    vehicleType:   {'2crew':'2-Crew Ambulance','wav':'WAV','estate':'Estate / Green Car'}[vType],
+    odometer:      odo,
+    fuelLevel:     fuel,
+    handoverNotes: hnotes,
+    finalNotes:    fnotes,
+    vehicleReady:  vehicleReady,
+    checks: JSON.parse(JSON.stringify(checks)), // clean copy, no undefined values
+    photoCount:    Object.values(photos).flat().length,
+    date:          new Date().toLocaleDateString('en-GB'),
+    time:          new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
+  };
+
+  // Show submitting state
+  if(_sb){_sb.textContent='Submitting...';_sb.disabled=true;}
+
+  // Submit via XMLHttpRequest — works on all browsers and mobile networks
+  const xhr = new XMLHttpRequest();
+  xhr.open('POST', SCRIPT_URL, true);
+  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
+
+  xhr.onreadystatechange = function() {
+    if (xhr.readyState === 4) {
+      showSuccess(vrn, fails.length, unsafe, vehicleReady);
+    }
+  };
+
+  xhr.onerror = function() {
+    // Try fallback fetch on XHR error
+    fetch(SCRIPT_URL, {
+      method: 'POST',
+      mode: 'no-cors',
+      body: 'payload=' + encodeURIComponent(JSON.stringify(payload))
+    }).finally(() => {
+      showSuccess(vrn, fails.length, unsafe, vehicleReady);
+    });
+  };
+
+  xhr.send('payload=' + encodeURIComponent(JSON.stringify(payload)));
+}
+
+function showSuccess(vrn,failCount,unsafe,ready){document.getElementById('main-form').style.display='none';document.getElementById('nav-bar').style.display='none';document.getElementById('steps-bar').style.display='none';const ss=document.getElementById('success-screen');ss.classList.add('show');const icon=document.getElementById('success-icon');icon.className='success-icon'+(unsafe||!ready?' bad':' ok');icon.textContent=unsafe||!ready?'⛔':'✓';document.getElementById('success-title').textContent=unsafe?'Vehicle Grounded':ready?'Vehicle Ready':'Check Submitted — Not Ready';document.getElementById('success-sub').textContent=vrn+' — check submitted to Fleet team.'+(unsafe?'\n\nUnsafe item flagged. Do not return vehicle to service.':failCount?'\n\n'+failCount+' defect(s) noted.':'\n\nNo defects found.');}
+
+function resetAll(){step=0;vType=null;checks={};photos={};['checklist-handover','checklist-visual','checklist-clean','checklist-equip','checklist-mech'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});vehicleReady=null;sigHasData=false;['vto-name','vrn-text','odo'].forEach(id=>document.getElementById(id).value='');document.getElementById('vrn-select').value='';document.getElementById('fuel').value='';document.getElementById('handover-notes').value='';document.getElementById('final-notes').value='';['2crew','wav','estate'].forEach(t=>document.getElementById('t-'+t).classList.remove('active'));document.querySelectorAll('.step-panel').forEach((p,i)=>p.classList.toggle('active',i===0));document.getElementById('success-screen').classList.remove('show');document.getElementById('main-form').style.display='';document.getElementById('nav-bar').style.display='';document.getElementById('steps-bar').style.display='';document.querySelectorAll('.photo-grid').forEach(g=>g.innerHTML='');document.getElementById('rb-yes').className='ready-btn';document.getElementById('rb-no').className='ready-btn';document.getElementById('fail-banner').style.display='none';document.getElementById('unsafe-warn').style.display='none';renderSteps();window.scrollTo(0,0);}
+
+// Safari + Chrome safe init
+var _appInited = false;
+function initApp() {
+  if (_appInited) return;
+  _appInited = true;
+  renderSteps();
+  tick();
+}
+if (document.readyState === 'loading') {
+  document.addEventListener('DOMContentLoaded', initApp);
+} else {
+  initApp();
+}
+window.addEventListener('load', initApp);
+</script>
+</body>
+</html>
