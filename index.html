@@ -93,8 +93,14 @@ canvas{display:block;width:100%;min-width:200px;height:120px;touch-action:none;b
 .success-icon.ok{background:var(--green)}
 .success-icon.bad{background:#6B0000}
 .success-title{color:white;font-size:22px;font-weight:700;margin-bottom:8px}
-.success-sub{color:rgba(255,255,255,.5);font-size:14px;line-height:1.5;margin-bottom:28px}
+.success-sub{color:rgba(255,255,255,.5);font-size:14px;line-height:1.5;margin-bottom:28px;white-space:pre-line}
 .new-btn{padding:14px 32px;background:var(--teal);color:var(--navy);border:none;border-radius:var(--r);font-family:'IBM Plex Sans',sans-serif;font-size:15px;font-weight:700;cursor:pointer}
+.new-btn-ghost{background:transparent;color:#fff;border:1.5px solid rgba(255,255,255,.35)}
+.result-actions{display:flex;flex-direction:column;gap:8px;width:min(280px,100%)}
+.pending-banner{display:none;background:var(--amber-l);color:#5C3B00;padding:10px 14px;font-size:13px;font-weight:600;line-height:1.35;align-items:center;justify-content:space-between;gap:10px}
+.pending-banner.show{display:flex}
+.pending-banner span{flex:1}
+.pending-banner button{background:var(--navy);color:#fff;border:none;border-radius:6px;padding:8px 12px;font-weight:700;font-family:inherit;font-size:12px;cursor:pointer;white-space:nowrap}
 </style>
 </head>
 <body>
@@ -103,12 +109,20 @@ canvas{display:block;width:100%;min-width:200px;height:120px;touch-action:none;b
   <div><div class="hdr-title">Vehicle Check</div><div class="hdr-sub">OnCue Transport — Jubilee Depot</div></div>
   <div class="hdr-clock" id="clock"></div>
 </div>
+<div class="pending-banner" id="pending-banner">
+  <span id="pending-banner-text"></span>
+  <button type="button" id="pending-banner-btn" onclick="flushPending({manual:true})">Send now</button>
+</div>
 <div class="steps-bar" id="steps-bar"></div>
 <div class="success-screen" id="success-screen">
   <div class="success-icon" id="success-icon"></div>
   <div class="success-title" id="success-title"></div>
   <div class="success-sub" id="success-sub"></div>
-  <button class="new-btn" onclick="resetAll()">Start New Check</button>
+  <div class="result-actions">
+    <button type="button" class="new-btn" id="result-retry" style="display:none" onclick="retryActive()">Try again</button>
+    <button type="button" class="new-btn" id="result-new" onclick="resetAll()">Start New Check</button>
+    <button type="button" class="new-btn new-btn-ghost" id="result-back" style="display:none" onclick="backToForm()">Back to check</button>
+  </div>
 </div>
 <div class="main" id="main-form">
   <!-- STEP 1: DETAILS -->
@@ -215,6 +229,11 @@ canvas{display:block;width:100%;min-width:200px;height:120px;touch-action:none;b
 </div>
 
 <script>
+// Setup — see README.md. SUBMIT_TOKEN must match the Apps Script property of the same name.
+// The token is visible to anyone who can open this page. It is not a secret.
+const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzt2KmN7CEoclnYRlGyMmX3YnzsGssVnb7yeJOw_Zzi5l07QMUjp_GoamjJEbrOkg/exec';
+const SUBMIT_TOKEN = 'REPLACE_WITH_SHARED_TOKEN';
+
 const CHECKS_ALL={handover:[{id:'ho_damage',label:'Damage noted at handover',hint:'Any new damage reported by outgoing crew?'},{id:'ho_equip',label:'Used equipment noted',hint:'Any equipment used/missing flagged at handover?'},{id:'ho_waste',label:'Waste removed',hint:'Any waste or clinical items left behind dealt with?'}],visual:[{id:'vi_ext',label:'Exterior — damage check',hint:'Walk around: dents, scratches, broken panels, mirrors'},{id:'vi_int',label:'Interior — damage check',hint:'Patient compartment and cab interior condition'},{id:'vi_stickers',label:'Vehicle stickers present',hint:'All required ID and safety stickers in place'},{id:'vi_waste',label:'No waste remaining',hint:'All clinical and general waste removed from vehicle'}],clean:[{id:'cl_stretcher',label:'Stretcher wiped down',hint:'All surfaces, buckles, rails, undercarriage'},{id:'cl_seats',label:'Seats wiped down',hint:'Cab and patient compartment seats'},{id:'cl_steering',label:'Steering wheel & gear stick',hint:'Wiped with appropriate cleaning solution'},{id:'cl_doors',label:'Door handles wiped',hint:'Interior and exterior handles all areas'},{id:'cl_surfaces',label:'All surfaces wiped',hint:'Dashboard, grab rails, cabinet doors, equipment housing'},{id:'cl_floor',label:'Floor mopped out',hint:'Patient compartment floor — clean and dry'},{id:'cl_cab',label:'Cab floor & mats clean',hint:'Swept, mopped if needed, presentable'}],equip_2crew:[
   // ── MAIN EQUIPMENT ──────────────────────────────────────
   {id:'eq_stretcher',    label:'Stretcher — functional, no slits',      hint:'Check mechanism, cleanliness, no tears in cover, secured'},
@@ -288,6 +307,8 @@ let step=0,TOTAL=7,vType=null,checks={},photos={},sigCtx,sigDrawing=false,sigHas
 const VRNS_2CREW=['FE75 PZF','FJ23 BAV','FJ23 BDE','FJ24 DKK','FJ24 DKV','FJ24 DMV','FJ24 DMZ','FJ24 GZW','FJ24 GZX','FJ73 DYW','FJ73 DZM','FJ73 EUT','FJ73 EWE','FJ74 DBY','FJ74 DEU','FJ74 DFA','FN23 DHC'];
 const VRNS_WAV=['BC24 XEG','BC24 XEH','BC24 XEJ','BC24 XEK','BC24 XEL','BC24 XEM','BC24 XEN','BC24 XEO','BC24 XEP','BC24 XER','BG24 FEX','BG24 KAO','BJ24 GYG','BJ24 GZP','BJ24 RNY','BK24 LRZ','BK24 LWN','BK24 LWP','BK24 LWS','BK24 LWU','BK24 LWV','BK74 JMO','BK74 JMU','BK74 JMV','BK74 JMX','BK74 JNL','BK74 JNN','BK74 JNO','BK74 JNV','BL23 LMY','BN24 WVC','BN74 PZG','BP73 ACF','BT23 VNC','BT24 FEU','BV24 XNR','BW24 OLA','BW24 ONR','BW24 ONU','BW24 ONZ','BW24 OOA','BW24 OOC','BW24 ZDF','BW24 ZFV','BW24 ZFY','BX24 XJJ','BX24 XKH','BX24 XLC','BX24 XLH','BX24 XLZ','GN19 BXW','GN19 BXX','GN19 BXY','GN19 BXZ','GN20 CYO','GN20 CYP','GN20 CYS','GN20 CYT','GN20 CZC','GN20 CZD','GN20 CZE','GN20 CZF','GN20 CZH','GN20 CZK','GN20 CZL','GN20 CZO','GN20 CZP','GN20 CZS','GN20 CZT','GN21 EBA','GN21 EBC','GN21 EBD','GN21 EBF','GN21 EBG','GN21 EBJ','GN21 EBK','GN21 EBL','GN21 EBM','GN21 EBP','GN21 EBU','GN21 EBV','GN21 EBX','GN21 EBZ','GN21 ECA','GN21 ECC','GN21 ECD','GN21 ECE','GN21 FTU','GN21 FTV','GN21 FTX','GN21 FTZ','GN21 FUA','GN21 FUB','GN21 FUF','GN21 FUG','GN21 FUT','GN21 FUU','GN21 FUV','GN21 FZH','GN21 FZJ','GN21 FZK','GN21 FZL','GN69 BKE','GN69 BKF','GN69 BKG','GN69 BKJ','GN69 BKV','GN69 BKX','GN69 BKY','GN69 BKZ','GN69 BLV','GN69 BLZ','GN70 DJF','GN70 DJJ','GN70 DJK','GN70 DJO','GN70 DJU','GN70 DJV','GN70 DJX','GN70 DJY','GN70 DJZ','GN70 DKD','GN70 DKF','GN70 DKJ','GN70 DKK','GN70 DKL','GN70 DKO','GN70 DKV','GN70 DKX','GN70 DKY','GN70 DLD','GN70 DLE','GN70 DLF','GN70 DLJ','GN70 DLK','GN70 DLO','GN70 DLU','GN70 DLV','GN70 FBA','GN70 FBB','GN70 FBC','GN71 AZF','GN71 AZG','GN71 AZJ','GN71 AZW','GN71 AZZ','RX22 CGZ','RX22 CHC','RX22 CHF','RX22 CHG','RX22 CHV','RX22 CJE','RX22 CJZ','RX22 CKA','RX22 CKC','RX22 CKD','RX22 EVR','RX22 EVU','RX22 EVV','RX22 EWA','RX22 FPE','RX22 FPK','RX71 EKR','RX71 EKT','RX71 EKU','RX71 EKW','RX71 EKY','RX71 ELJ','SB19 FTC','SB19 FTD','VA23 BVV','VA23 CDX','VA23 CFD','VA23 DVN','VA23 EDX','VA74 EVU','VE22 CZW','VE22 HDN','VE22 NLJ','VE22 NLV','VE23 YTR','VE72 DUH','VE72 FDP','VE72 FFC','VE72 FFW','VE72 GUA','VE74 UKW','VK22 ZVU','VK71 YLR','VK72 XFC','VK72 XYH','VK72 XZV','VK72 YNG','VK72 YNJ','VK72 YSN','VK72 YZP','VK72 ZFD','VK72 ZWJ','VK72 ZYL','VK73 BVT','VK73 CVP','VK73 WOY','VK73 XKJ','VK73 XLF','VK73 XMY','VK73 XVY','VK73 ZCY','VK73 ZXP','VN22 SWO','VN22 TYD','VN22 TYG','VN22 UAK','VN22 XGF','VN22 ZRC','VN71 AOW','VN71 BVV','VN71 BXS','VN71 ERK','VN71 FBB','VN71 GUW','VN71 HHB','VN72 AAF','VN72 ACF','VN72AAX','VN72ABO','VN72ABV','VO23 WVB','VO23 WWH','VO23 WWK','VO23 WWM','VO23 XLC','VO23 XLG','VO23 XLM','VO72 EFJ','VO72 HXZ','VO72 OPR','VO72 OSU','VO72 SHJ','VO72 SWF','VO72 SWJ','VO72 SWU','VU24 KBJ','VU72 JNZ','VU72 JOA','VU72 JOH','VU72 JPJ','VU72 JPO','VU72 JPV','VU72 JRV','VU72 JSV','VU72 JTV','VU72JOV','WD25 AFK','WD25 AFN','WD25 AFO','WD25 AFU','WD25 AFV','WD25 AFZ','WD75 HVM','WD75 HVN','WD75 HVO','WD75 HVP','WD75 HVR','WF75 CVA','WF75 CXH','WF75 CXJ','WF75 CXK','WF75 CXM','WF75 CXN','WF75 CXO','WF75 CXP','WF75 CZR','WF75 DDE','WF75 DDJ','WF75 DDK','WF75 DDL','WG25 ZKB','WH74 DXB','WH74 EMJ','WH74 EOT'];
 const VRNS_ESTATE=['LR74 GYF','LR74 GYT'];
+// Live lists. vehicles.json and the Registrations tab override these; the constants stay as the fallback.
+let fleetLists={'2crew':VRNS_2CREW.slice(),wav:VRNS_WAV.slice(),estate:VRNS_ESTATE.slice()};
 
 function getVRN(){return document.getElementById('vrn-select').style.display!=='none'?document.getElementById('vrn-select').value:document.getElementById('vrn-text').value.trim();}
 
@@ -310,9 +331,9 @@ function selType(t){
   txt.style.display='none';
   sel.style.display='';
   sel.value='';
-  if(t==='2crew') populateVRNs(VRNS_2CREW);
-  else if(t==='estate') populateVRNs(VRNS_ESTATE);
-  else populateVRNs(VRNS_WAV);
+  if(t==='2crew') populateVRNs(fleetLists['2crew']);
+  else if(t==='estate') populateVRNs(fleetLists.estate);
+  else populateVRNs(fleetLists.wav);
 }
 
 function buildChecklists(){const ek=vType==='2crew'?'equip_2crew':vType==='wav'?'equip_wav':'equip_estate';checks={};[{c:'checklist-handover',k:'handover'},{c:'checklist-visual',k:'visual'},{c:'checklist-clean',k:'clean'},{c:'checklist-equip',k:ek},{c:'checklist-mech',k:'mech'}].forEach(({c,k})=>{const el=document.getElementById(c);if(!el)return;el.innerHTML='';CHECKS_ALL[k].forEach(item=>{checks[item.id]={result:'',severity:'',note:''};el.appendChild(makeCI(item));});});}
@@ -326,7 +347,33 @@ function setSev(id,sev){checks[id].severity=sev;['minor','major','unsafe'].forEa
 function updateWarnings(){const fails=Object.values(checks).filter(c=>c.result==='fail');const unsafe=fails.some(c=>c.severity==='unsafe');document.getElementById('unsafe-warn').style.display=unsafe?'block':'none';const fb=document.getElementById('fail-banner');if(fails.length){fb.style.display='block';fb.textContent='⚠ '+fails.length+' item'+(fails.length>1?'s':'')+' failed — please complete defect details';}else fb.style.display='none';}
 
 function addPhoto(s){document.getElementById('file-'+s).click();}
-function handlePhotos(section,input){if(!photos[section])photos[section]=[];const grid=document.getElementById('photos-'+section);Array.from(input.files).forEach(file=>{const reader=new FileReader();reader.onload=e=>{const idx=photos[section].length;photos[section].push(e.target.result);const thumb=document.createElement('div');thumb.className='photo-thumb';const img=document.createElement('img');img.src=e.target.result;const del=document.createElement('button');del.className='photo-del';del.textContent='×';del.onclick=()=>{photos[section].splice(idx,1);thumb.remove();};thumb.appendChild(img);thumb.appendChild(del);grid.appendChild(thumb);};reader.readAsDataURL(file);});input.value='';}
+async function handlePhotos(section,input){
+  const files=Array.from(input.files||[]);
+  input.value='';
+  if(!files.length)return;
+  if(!photos[section])photos[section]=[];
+  const grid=document.getElementById('photos-'+section);
+  for(let i=0;i<files.length;i++){
+    if(photos[section].length>=8||totalPhotos()>=12){alert('You can add up to 8 photos in one section, and 12 on the whole check.');break;}
+    const dataUrl=await preparePhoto(files[i]);
+    if(!dataUrl){alert('One photo could not be added. Try a smaller image.');continue;}
+    photos[section].push(dataUrl);
+    const saved=dataUrl;
+    const thumb=document.createElement('div');
+    thumb.className='photo-thumb';
+    const img=document.createElement('img');
+    img.src=saved;
+    img.alt='Check photo';
+    const del=document.createElement('button');
+    del.type='button';
+    del.className='photo-del';
+    del.textContent='×';
+    del.onclick=function(){photos[section]=(photos[section]||[]).filter(function(p){return p!==saved;});thumb.remove();};
+    thumb.appendChild(img);
+    thumb.appendChild(del);
+    grid.appendChild(thumb);
+  }
+}
 
 function initSig(){const canvas=document.getElementById('sig-canvas');
   // Get width from the card wrapper, not the canvas parent
@@ -342,62 +389,679 @@ function nextStep(){if(step===0){if(!document.getElementById('vto-name').value.t
 
 function prevStep(){if(step>0){document.getElementById('step-'+step).classList.remove('active');step--;document.getElementById('step-'+step).classList.add('active');renderSteps();window.scrollTo(0,0);if(step===6)setTimeout(initSig,200);}}
 
-function submitCheck(){const _sb=document.getElementById('submit-btn');if(vehicleReady===null){alert('Please mark the vehicle as Ready or Not Ready.');return;}if(!sigHasData){alert('Please sign to confirm the check.');return;}const vto=document.getElementById('vto-name').value.trim();const vrn=getVRN();const odo=document.getElementById('odo').value.trim();const fuel=document.getElementById('fuel').value;const hnotes=document.getElementById('handover-notes').value.trim();const fnotes=document.getElementById('final-notes').value.trim();const now=new Date();const dateStr=now.toLocaleDateString('en-GB',{weekday:'long',day:'numeric',month:'long',year:'numeric'});const timeStr=now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'});const typeLabel={'2crew':'2-Crew Ambulance','wav':'WAV','estate':'Estate / Green Car'}[vType];const fails=Object.entries(checks).filter(([,v])=>v.result==='fail');const unsafe=fails.some(([,v])=>v.severity==='unsafe');let body='VTO VEHICLE CHECK REPORT\n'+'='.repeat(44)+'\n\n';body+='Date:        '+dateStr+'\nTime:        '+timeStr+'\nVTO:         '+vto+'\nVRN:         '+vrn+'\nType:        '+typeLabel+'\nOdometer:    '+(odo||'Not recorded')+' miles\nFuel:        '+(fuel||'Not recorded')+'\n\n';body+='VEHICLE STATUS: '+(vehicleReady?'READY TO GO':'NOT READY')+'\n\n';if(hnotes)body+='HANDOVER NOTES\n'+'-'.repeat(40)+'\n'+hnotes+'\n\n';if(unsafe){body+='UNSAFE ITEMS — VEHICLE GROUNDED\n'+'-'.repeat(40)+'\n';fails.filter(([,v])=>v.severity==='unsafe').forEach(([id,v])=>{body+='[UNSAFE] '+id+': '+(v.note||'No detail')+'\n';});}const majorFails=fails.filter(([,v])=>v.severity!=='unsafe');if(majorFails.length){body+='\nDEFECTS\n'+'-'.repeat(40)+'\n';majorFails.forEach(([id,v])=>{const sev=v.severity?v.severity.toUpperCase():'UNRATED';body+='['+sev+'] '+id+': '+(v.note||'No detail')+'\n';});}if(!fails.length)body+='DEFECTS: None\n';body+='\n';const totalChecked=Object.values(checks).filter(c=>c.result!=='').length;const totalItems=Object.keys(checks).length;body+='ITEMS CHECKED: '+totalChecked+' of '+totalItems+'\n';if(fnotes)body+='\nADDITIONAL NOTES\n'+'-'.repeat(40)+'\n'+fnotes+'\n';const photoCount=Object.values(photos).flat().length;if(photoCount)body+='\nPHOTOS: '+photoCount+' photo(s) taken during this check\n';body+='\n'+'='.repeat(44)+'\nSubmitted via OnCue VTO Inspection Tool';const subject=unsafe?'VEHICLE GROUNDED — '+vrn+' VTO Check '+timeStr:fails.length?'Defects — '+vrn+' VTO Check '+timeStr+(vehicleReady?' — Ready':' — NOT READY'):'Clear — '+vrn+' VTO Check '+timeStr+(vehicleReady?' — Ready':' — NOT READY');// Send to Google Apps Script
-  const SCRIPT_URL = 'https://script.google.com/macros/s/AKfycbzt2KmN7CEoclnYRlGyMmX3YnzsGssVnb7yeJOw_Zzi5l07QMUjp_GoamjJEbrOkg/exec';
+const PHOTO_SECTIONS=['handover','visual','clean','equip','mech'];
+const PENDING_KEY='oncue-vto-pending-v1';
+let currentCheckId=null,activeResultId=null,formPaused=false,submitting=false;
+let serverMode='unknown',serverCheckedAt=0,flushing=false,memoryOnly=null;
+let lastSave={localOk:true,idbOk:true};
+const inFlight=new Set();
 
-  // Build structured payload for the sheet
-  // Collect all defect notes at submit time
-  Object.keys(checks).forEach(id => {
-    const noteEl = document.getElementById('cdn-' + id);
-    if (noteEl) checks[id].note = noteEl.value.trim();
-  });
-
-  const payload = {
-    vtoName:       vto,
-    vrn:           vrn,
-    vehicleType:   {'2crew':'2-Crew Ambulance','wav':'WAV','estate':'Estate / Green Car'}[vType],
-    odometer:      odo,
-    fuelLevel:     fuel,
-    handoverNotes: hnotes,
-    finalNotes:    fnotes,
-    vehicleReady:  vehicleReady,
-    checks: JSON.parse(JSON.stringify(checks)), // clean copy, no undefined values
-    photoCount:    Object.values(photos).flat().length,
-    date:          new Date().toLocaleDateString('en-GB'),
-    time:          new Date().toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'}),
-  };
-
-  // Show submitting state
-  if(_sb){_sb.textContent='Submitting...';_sb.disabled=true;}
-
-  // Submit via XMLHttpRequest — works on all browsers and mobile networks
-  const xhr = new XMLHttpRequest();
-  xhr.open('POST', SCRIPT_URL, true);
-  xhr.setRequestHeader('Content-Type', 'application/x-www-form-urlencoded');
-
-  xhr.onreadystatechange = function() {
-    if (xhr.readyState === 4) {
-      showSuccess(vrn, fails.length, unsafe, vehicleReady);
-    }
-  };
-
-  xhr.onerror = function() {
-    // Try fallback fetch on XHR error
-    fetch(SCRIPT_URL, {
-      method: 'POST',
-      mode: 'no-cors',
-      body: 'payload=' + encodeURIComponent(JSON.stringify(payload))
-    }).finally(() => {
-      showSuccess(vrn, fails.length, unsafe, vehicleReady);
-    });
-  };
-
-  xhr.send('payload=' + encodeURIComponent(JSON.stringify(payload)));
+function totalPhotos(){
+  return PHOTO_SECTIONS.reduce(function(n,section){return n+((photos[section]&&photos[section].length)||0);},0);
 }
 
-function showSuccess(vrn,failCount,unsafe,ready){document.getElementById('main-form').style.display='none';document.getElementById('nav-bar').style.display='none';document.getElementById('steps-bar').style.display='none';const ss=document.getElementById('success-screen');ss.classList.add('show');const icon=document.getElementById('success-icon');icon.className='success-icon'+(unsafe||!ready?' bad':' ok');icon.textContent=unsafe||!ready?'⛔':'✓';document.getElementById('success-title').textContent=unsafe?'Vehicle Grounded':ready?'Vehicle Ready':'Check Submitted — Not Ready';document.getElementById('success-sub').textContent=vrn+' — check submitted to Fleet team.'+(unsafe?'\n\nUnsafe item flagged. Do not return vehicle to service.':failCount?'\n\n'+failCount+' defect(s) noted.':'\n\nNo defects found.');}
+function blobToDataUrl(blob){
+  return new Promise(function(resolve,reject){
+    const reader=new FileReader();
+    reader.onload=function(){resolve(reader.result);};
+    reader.onerror=function(){reject(reader.error||new Error('file'));};
+    reader.readAsDataURL(blob);
+  });
+}
 
-function resetAll(){step=0;vType=null;checks={};photos={};['checklist-handover','checklist-visual','checklist-clean','checklist-equip','checklist-mech'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});vehicleReady=null;sigHasData=false;['vto-name','vrn-text','odo'].forEach(id=>document.getElementById(id).value='');document.getElementById('vrn-select').value='';document.getElementById('fuel').value='';document.getElementById('handover-notes').value='';document.getElementById('final-notes').value='';['2crew','wav','estate'].forEach(t=>document.getElementById('t-'+t).classList.remove('active'));document.querySelectorAll('.step-panel').forEach((p,i)=>p.classList.toggle('active',i===0));document.getElementById('success-screen').classList.remove('show');document.getElementById('main-form').style.display='';document.getElementById('nav-bar').style.display='';document.getElementById('steps-bar').style.display='';document.querySelectorAll('.photo-grid').forEach(g=>g.innerHTML='');document.getElementById('rb-yes').className='ready-btn';document.getElementById('rb-no').className='ready-btn';document.getElementById('fail-banner').style.display='none';document.getElementById('unsafe-warn').style.display='none';renderSteps();window.scrollTo(0,0);}
+function loadImage(src){
+  return new Promise(function(resolve,reject){
+    const img=new Image();
+    img.onload=function(){resolve(img);};
+    img.onerror=function(){reject(new Error('image'));};
+    img.src=src;
+  });
+}
+
+async function fileToDrawable(file){
+  if(window.createImageBitmap){
+    try{return await createImageBitmap(file,{imageOrientation:'from-image'});}
+    catch(e){}
+  }
+  return loadImage(await blobToDataUrl(file));
+}
+
+function compressDrawable(src,maxEdge,quality){
+  const w0=src.naturalWidth||src.width;
+  const h0=src.naturalHeight||src.height;
+  if(!w0||!h0)return '';
+  const scale=Math.min(1,maxEdge/Math.max(w0,h0));
+  const w=Math.max(1,Math.round(w0*scale));
+  const h=Math.max(1,Math.round(h0*scale));
+  const canvas=document.createElement('canvas');
+  canvas.width=w;
+  canvas.height=h;
+  const ctx=canvas.getContext('2d');
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,w,h);
+  ctx.drawImage(src,0,0,w,h);
+  return canvas.toDataURL('image/jpeg',quality);
+}
+
+async function preparePhoto(file){
+  let src;
+  try{src=await fileToDrawable(file);}
+  catch(e){return '';}
+  const passes=[[1280,0.68],[1024,0.55],[800,0.42]];
+  let current='';
+  for(let i=0;i<passes.length;i++){
+    current=compressDrawable(src,passes[i][0],passes[i][1]);
+    if(current&&current.length<=160000)break;
+  }
+  if(src.close){try{src.close();}catch(e){}}
+  if(!current||current.indexOf('data:image/jpeg')!==0||current.length>400000)return '';
+  return current;
+}
+
+function signatureDataUrl(){
+  const canvas=document.getElementById('sig-canvas');
+  if(!canvas||!sigHasData)return '';
+  const out=document.createElement('canvas');
+  out.width=canvas.width;
+  out.height=canvas.height;
+  const ctx=out.getContext('2d');
+  ctx.fillStyle='#ffffff';
+  ctx.fillRect(0,0,out.width,out.height);
+  ctx.drawImage(canvas,0,0);
+  return out.toDataURL('image/jpeg',0.85);
+}
+
+function newCheckId(){
+  if(window.crypto&&crypto.randomUUID)return crypto.randomUUID();
+  return 'chk-'+Date.now().toString(36)+'-'+Math.random().toString(36).slice(2,12);
+}
+
+function fleetHasAny(v){
+  return !!(v&&['2crew','wav','estate'].some(function(k){return Array.isArray(v[k])&&v[k].length;}));
+}
+
+function normaliseDisplay(v){
+  return String(v||'').toUpperCase().replace(/\s+/g,' ').trim();
+}
+
+function applyFleet(v){
+  ['2crew','wav','estate'].forEach(function(k){
+    if(!Array.isArray(v[k]))return;
+    fleetLists[k]=v[k].map(normaliseDisplay).filter(Boolean);
+  });
+  if(!vType)return;
+  const current=getVRN();
+  populateVRNs(fleetLists[vType]||[]);
+  const sel=document.getElementById('vrn-select');
+  if(current&&Array.from(sel.options).some(function(o){return o.value===current;}))sel.value=current;
+}
+
+async function loadFleetFile(){
+  try{
+    const url=new URL('vehicles.json',window.location.href);
+    const res=await fetch(url.toString(),{cache:'no-store'});
+    if(!res.ok)return;
+    const data=await res.json();
+    if(fleetHasAny(data))applyFleet(data);
+  }catch(e){}
+}
+
+function parseJson(text){
+  const body=String(text||'').replace(/^\uFEFF/,'').trim();
+  if(!body||body.charAt(0)!=='{')return null;
+  try{return JSON.parse(body);}catch(e){return null;}
+}
+
+function looksLikeHtml(body){
+  const s=String(body||'').slice(0,800).toLowerCase();
+  return s.indexOf('<!doctype html')!==-1||s.indexOf('<html')!==-1||s.indexOf('<head')!==-1||s.indexOf('accounts.google.com')!==-1;
+}
+
+function interpretBody(status,text){
+  const body=String(text||'').trim();
+  const json=parseJson(body);
+  const serviceMatch=!!(json&&json.service==='oncue-vto');
+  if(serviceMatch&&json.ok===true&&(json.received===true||json.duplicate===true))return {kind:'success',serviceMatch:true};
+  if(serviceMatch&&json.ok===true&&json.found===true)return {kind:'found',serviceMatch:true};
+  if(serviceMatch&&json.ok===true&&json.found===false)return {kind:'notfound',serviceMatch:true};
+  if(json&&json.ok===false){
+    return {kind:'rejected',message:String(json.error||'The server rejected this check.'),retryable:json.retryable!==false,serviceMatch:serviceMatch};
+  }
+  if(serviceMatch&&json.ok===true)return {kind:'unconfirmed',serviceMatch:true};
+  if(status>=200&&status<300&&body&&!looksLikeHtml(body))return {kind:'legacy-success',serviceMatch:false};
+  return {kind:'unconfirmed',serviceMatch:false};
+}
+
+function fetchWithTimeout(ms,build){
+  return new Promise(function(resolve,reject){
+    const controller=typeof AbortController==='function'?new AbortController():null;
+    let settled=false;
+    const timer=setTimeout(function(){
+      if(settled)return;
+      settled=true;
+      if(controller)controller.abort();
+      const err=new Error('The server took too long to confirm.');
+      err.name='AbortError';
+      reject(err);
+    },ms);
+    Promise.resolve().then(function(){return build(controller);}).then(function(value){
+      if(settled)return;
+      settled=true;
+      clearTimeout(timer);
+      resolve(value);
+    }).catch(function(err){
+      if(settled)return;
+      settled=true;
+      clearTimeout(timer);
+      reject(err);
+    });
+  });
+}
+
+function postPayload(payload){
+  const json=JSON.stringify(payload);
+  const formBody='token='+encodeURIComponent(SUBMIT_TOKEN)+'&payload='+encodeURIComponent(json);
+  const usePlain=formBody.length>1200000;
+  return fetchWithTimeout(50000,function(controller){
+    const init={method:'POST',redirect:'follow',credentials:'omit',cache:'no-store'};
+    if(controller)init.signal=controller.signal;
+    if(usePlain){
+      const body=JSON.parse(json);
+      body.token=SUBMIT_TOKEN;
+      init.headers={'Content-Type':'text/plain;charset=utf-8'};
+      init.body=JSON.stringify(body);
+    }else{
+      init.headers={'Content-Type':'application/x-www-form-urlencoded;charset=UTF-8'};
+      init.body=formBody;
+    }
+    return fetch(SCRIPT_URL,init).then(function(res){
+      return res.text().then(function(text){return {status:res.status,text:text};});
+    });
+  });
+}
+
+function fetchStatus(checkId){
+  const join=SCRIPT_URL.indexOf('?')===-1?'?':'&';
+  const url=SCRIPT_URL+join+'action=status&checkId='+encodeURIComponent(checkId);
+  return fetchWithTimeout(20000,function(controller){
+    const init={method:'GET',redirect:'follow',credentials:'omit',cache:'no-store'};
+    if(controller)init.signal=controller.signal;
+    return fetch(url,init).then(function(res){
+      return res.text().then(function(text){return {status:res.status,text:text};});
+    });
+  });
+}
+
+async function refreshServerMode(force){
+  if(!force&&serverCheckedAt&&Date.now()-serverCheckedAt<15000&&serverMode!=='unknown')return serverMode;
+  try{
+    const res=await fetchWithTimeout(15000,function(controller){
+      const init={method:'GET',redirect:'follow',credentials:'omit',cache:'no-store'};
+      if(controller)init.signal=controller.signal;
+      return fetch(SCRIPT_URL+'?action=vehicles',init).then(function(r){
+        return r.text().then(function(text){return {status:r.status,text:text};});
+      });
+    });
+    const json=parseJson(res.text);
+    if(json&&json.service==='oncue-vto'&&Number(json.version)>=2){
+      serverMode='new';
+      if(json.ok!==false&&json.vehicles&&fleetHasAny(json.vehicles))applyFleet(json.vehicles);
+    }else if(res.status||(res.text&&res.text.length)){
+      serverMode='legacy';
+    }else{
+      serverMode='unknown';
+    }
+  }catch(e){
+    serverMode='unknown';
+  }
+  serverCheckedAt=Date.now();
+  return serverMode;
+}
+
+function failureMessage(posted){
+  if(typeof navigator!=='undefined'&&navigator.onLine===false)return 'There is no signal, so Fleet does not have this check yet.';
+  if(posted&&posted.error&&posted.error.name==='AbortError')return 'The server took too long to confirm, so this check may not have reached Fleet.';
+  return 'The server did not confirm this check, so Fleet may not have it yet.';
+}
+
+function slimPayload(full){
+  return {
+    checkId:full.checkId,
+    vtoName:full.vtoName,
+    vrn:full.vrn,
+    vehicleType:full.vehicleType,
+    odometer:full.odometer,
+    fuelLevel:full.fuelLevel,
+    handoverNotes:full.handoverNotes,
+    finalNotes:full.finalNotes,
+    vehicleReady:full.vehicleReady,
+    checks:full.checks,
+    photoCount:full.photoCount,
+    date:full.date,
+    time:full.time
+  };
+}
+
+async function confirmSend(record,slim){
+  const payload=slim?slimPayload(record.payload):record.payload;
+  let posted;
+  try{posted=await postPayload(payload);}
+  catch(err){posted={status:0,text:'',error:err};}
+  const outcome=interpretBody(posted.status,posted.text);
+  if(outcome.serviceMatch)serverMode='new';
+  if(outcome.kind==='success')return outcome;
+  if(outcome.kind==='rejected')return outcome;
+  if(outcome.kind==='legacy-success'&&slim&&serverMode!=='new')return {kind:'legacy-success'};
+
+  let statusOutcome=null;
+  try{
+    const st=await fetchStatus(record.id);
+    statusOutcome=interpretBody(st.status,st.text);
+    if(statusOutcome.serviceMatch)serverMode='new';
+  }catch(e){}
+
+  if(statusOutcome&&statusOutcome.kind==='found')return {kind:'success',via:'status'};
+  if(statusOutcome&&statusOutcome.kind==='notfound'&&serverMode==='new'){
+    return {kind:'failed',message:'The server does not have this check yet.',retryable:true};
+  }
+  if(outcome.kind==='legacy-success'&&slim)return {kind:'legacy-success'};
+  const online=typeof navigator==='undefined'||navigator.onLine!==false;
+  return {
+    kind:'failed',
+    message:failureMessage(posted),
+    retryable:true,
+    maybeLanded:!!(slim&&serverMode!=='new'&&online)
+  };
+}
+
+async function deliver(record){
+  if(Date.now()-serverCheckedAt>15000||serverMode==='unknown')await refreshServerMode(true);
+  if(record.legacyRecorded){
+    if(serverMode!=='new')return {kind:'waiting'};
+    return confirmSend(record,false);
+  }
+  if(serverMode==='new')return confirmSend(record,false);
+  if(serverMode==='unknown'&&typeof navigator!=='undefined'&&navigator.onLine===false){
+    return {kind:'failed',message:'There is no signal, so Fleet does not have this check yet.',retryable:true};
+  }
+  const slimResult=await confirmSend(record,true);
+  if(serverMode==='new'&&slimResult.kind==='rejected')return confirmSend(record,false);
+  return slimResult;
+}
+
+function okRecord(r){
+  return !!(r&&typeof r.id==='string'&&r.payload&&r.payload.vrn);
+}
+
+async function readStoredPending(){
+  try{
+    const raw=localStorage.getItem(PENDING_KEY);
+    if(raw){
+      const parsed=JSON.parse(raw);
+      if(Array.isArray(parsed))return parsed.filter(okRecord);
+      if(!(parsed&&parsed.mode==='idb'))return [];
+    }
+  }catch(e){}
+  try{
+    const rows=await idbAll();
+    return rows.filter(okRecord);
+  }catch(e){
+    return [];
+  }
+}
+
+async function readAllPending(){
+  const stored=memoryOnly?memoryOnly.filter(okRecord):await readStoredPending();
+  return stored.slice().sort(function(a,b){return (a.createdAt||0)-(b.createdAt||0);});
+}
+
+function openIdb(){
+  if(!openIdb.promise){
+    openIdb.promise=new Promise(function(resolve,reject){
+      if(!window.indexedDB){reject(new Error('no idb'));return;}
+      const req=indexedDB.open('oncue-vto',1);
+      req.onupgradeneeded=function(){
+        const db=req.result;
+        if(!db.objectStoreNames.contains('pending'))db.createObjectStore('pending',{keyPath:'id'});
+      };
+      req.onsuccess=function(){resolve(req.result);};
+      req.onerror=function(){reject(req.error||new Error('idb'));};
+    });
+  }
+  return openIdb.promise;
+}
+
+function idbAll(){
+  return openIdb().then(function(db){
+    return new Promise(function(resolve,reject){
+      const tx=db.transaction('pending','readonly');
+      const req=tx.objectStore('pending').getAll();
+      req.onsuccess=function(){resolve(req.result||[]);};
+      req.onerror=function(){reject(req.error||new Error('idb'));};
+    });
+  });
+}
+
+function idbReplaceAll(list){
+  return openIdb().then(function(db){
+    return new Promise(function(resolve,reject){
+      const tx=db.transaction('pending','readwrite');
+      const store=tx.objectStore('pending');
+      store.clear();
+      list.forEach(function(record){store.put(JSON.parse(JSON.stringify(record)));});
+      tx.oncomplete=function(){resolve();};
+      tx.onerror=function(){reject(tx.error||new Error('idb'));};
+      tx.onabort=function(){reject(tx.error||new Error('idb abort'));};
+    });
+  });
+}
+
+async function writePending(list){
+  const copy=list.map(function(record){return JSON.parse(JSON.stringify(record));});
+  memoryOnly=copy;
+  lastSave={localOk:false,idbOk:false};
+  try{
+    localStorage.setItem(PENDING_KEY,JSON.stringify(copy));
+    lastSave.localOk=true;
+  }catch(e){
+    try{localStorage.removeItem(PENDING_KEY);}catch(e2){}
+    try{localStorage.setItem(PENDING_KEY,JSON.stringify({mode:'idb'}));}catch(e3){}
+  }
+  try{
+    await idbReplaceAll(copy);
+    lastSave.idbOk=true;
+  }catch(e){}
+  return lastSave;
+}
+
+let storeChain=Promise.resolve();
+function enqueueStore(fn){
+  const run=storeChain.then(fn,fn);
+  storeChain=run.then(function(){},function(){});
+  return run;
+}
+
+async function upsertPending(record){
+  return enqueueStore(async function(){
+    const all=await readAllPending();
+    const idx=all.findIndex(function(item){return item.id===record.id;});
+    if(idx===-1)all.push(record);else all[idx]=record;
+    await writePending(all);
+  });
+}
+
+async function removePending(id){
+  return enqueueStore(async function(){
+    const all=await readAllPending();
+    await writePending(all.filter(function(item){return item.id!==id;}));
+  });
+}
+
+function renderBanner(list){
+  const el=document.getElementById('pending-banner');
+  const text=document.getElementById('pending-banner-text');
+  const btn=document.getElementById('pending-banner-btn');
+  if(!el||!text)return;
+  if(!list.length){el.classList.remove('show');return;}
+  const waiting=list.filter(function(r){return !r.legacyRecorded;});
+  const photosWaiting=list.filter(function(r){return r.legacyRecorded;});
+  if(waiting.length&&photosWaiting.length){
+    const waitingText=waiting.length===1?'1 check still needs':waiting.length+' checks still need';
+    text.textContent=waitingText+' to reach Fleet, and photos from '+photosWaiting.length+' more are waiting on this phone.';
+  }else if(photosWaiting.length){
+    text.textContent='Photos and the signature from '+photosWaiting.length+(photosWaiting.length===1?' check':' checks')+' are saved on this phone. They will be filed when the updated Fleet script is live.';
+  }else{
+    const savedText=waiting.length===1?'1 check is':waiting.length+' checks are';
+    text.textContent=savedText+' saved on this phone — Fleet has not confirmed '+(waiting.length===1?'it':'them')+' yet.';
+  }
+  if(btn){
+    const canSend=list.some(function(r){return !r.legacyRecorded||serverMode==='new';});
+    btn.style.display=canSend?'':'none';
+  }
+  el.classList.add('show');
+}
+
+function updateBanner(){
+  readAllPending().then(renderBanner).catch(function(){});
+}
+
+function backoffMs(record){
+  const n=record.attempts||0;
+  if(n<=1)return 0;
+  return Math.min(120000,15000*(n-1));
+}
+
+async function deliverAndUpdate(record){
+  record.attempts=(record.attempts||0)+1;
+  record.lastAttempt=Date.now();
+  const outcome=await deliver(record);
+  if(outcome.kind==='success'){
+    await removePending(record.id);
+    return outcome;
+  }
+  if(outcome.kind==='legacy-success'||outcome.kind==='waiting'){
+    record.legacyRecorded=true;
+    record.retryable=true;
+    record.maybeLanded=false;
+    record.lastError='';
+    await upsertPending(record);
+    return outcome;
+  }
+  record.retryable=outcome.retryable!==false;
+  record.maybeLanded=!!outcome.maybeLanded;
+  record.lastError=outcome.message||'Not sent';
+  await upsertPending(record);
+  return outcome;
+}
+
+async function withRecordLock(record,fn){
+  if(inFlight.has(record.id))return {kind:'inflight'};
+  inFlight.add(record.id);
+  try{return await fn(record);}
+  finally{inFlight.delete(record.id);updateBanner();}
+}
+
+let flushAgain=null;
+async function flushPending(opts){
+  if(flushing){
+    if(!flushAgain)flushAgain=opts||{};
+    else if(opts&&opts.manual)flushAgain.manual=true;
+    else if(opts&&opts.reason==='online')flushAgain.reason='online';
+    return;
+  }
+  flushing=true;
+  try{
+    await refreshServerMode(!!(opts&&(opts.manual||opts.reason==='load'||opts.reason==='online')));
+    const list=await readAllPending();
+    for(let i=0;i<list.length;i++){
+      const record=list[i];
+      const manual=!!(opts&&opts.manual);
+      if(formPaused&&!manual&&record.id===currentCheckId)continue;
+      if(record.legacyRecorded&&serverMode!=='new')continue;
+      if(record.maybeLanded&&serverMode!=='new'&&!manual)continue;
+      if(record.retryable===false&&!manual)continue;
+      if(inFlight.has(record.id))continue;
+      const immediate=manual||(opts&&(opts.reason==='online'||opts.reason==='load'));
+      if(!immediate&&record.lastAttempt&&Date.now()-record.lastAttempt<backoffMs(record))continue;
+      const outcome=await withRecordLock(record,deliverAndUpdate);
+      if(outcome&&outcome.kind!=='inflight'&&activeResultId&&record.id===activeResultId)present(outcome,record);
+    }
+  }finally{
+    flushing=false;
+    updateBanner();
+    if(flushAgain){
+      const next=flushAgain;
+      flushAgain=null;
+      await flushPending(next);
+    }
+  }
+}
+
+function resultSub(info,legacy){
+  let text=info.vrn+' — check submitted to Fleet team.';
+  if(info.unsafe)text+='\n\nUnsafe item flagged. Do not return vehicle to service.';
+  else if(info.fails)text+='\n\n'+info.fails+' defect(s) noted.';
+  else text+='\n\nNo defects found.';
+  if(legacy)text+='\n\nPhotos and the signature are saved on this phone and will be filed when the updated Fleet script is live.';
+  return text;
+}
+
+function showResultScreen(opts){
+  document.getElementById('main-form').style.display='none';
+  document.getElementById('nav-bar').style.display='none';
+  document.getElementById('steps-bar').style.display='none';
+  const ss=document.getElementById('success-screen');
+  ss.classList.add('show');
+  const icon=document.getElementById('success-icon');
+  const failed=opts.title==='Check not sent';
+  icon.className='success-icon '+(opts.ok?'ok':'bad');
+  icon.textContent=failed?'!':(opts.ok?'✓':'⛔');
+  document.getElementById('success-title').textContent=opts.title;
+  document.getElementById('success-sub').textContent=opts.sub;
+  document.getElementById('result-retry').style.display=opts.buttons.retry?'block':'none';
+  document.getElementById('result-new').style.display=opts.buttons.next?'block':'none';
+  document.getElementById('result-back').style.display=opts.buttons.back?'block':'none';
+  window.scrollTo(0,0);
+}
+
+function countsFrom(payload){
+  const checksObj=payload.checks||{};
+  const fails=Object.keys(checksObj).filter(function(id){return checksObj[id]&&checksObj[id].result==='fail';});
+  const unsafe=fails.some(function(id){return checksObj[id].severity==='unsafe';});
+  return {fails:fails.length,unsafe:unsafe,ready:payload.vehicleReady,vrn:payload.vrn};
+}
+
+function present(outcome,record){
+  activeResultId=record.id;
+  const info=countsFrom(record.payload||{});
+  if(outcome.kind==='success'){
+    showResultScreen({ok:!(info.unsafe||!info.ready),title:info.unsafe?'Vehicle Grounded':info.ready?'Vehicle Ready':'Check Submitted — Not Ready',sub:resultSub(info,false),buttons:{retry:false,next:true,back:false}});
+    return;
+  }
+  if(outcome.kind==='legacy-success'||outcome.kind==='waiting'){
+    showResultScreen({ok:!(info.unsafe||!info.ready),title:info.unsafe?'Vehicle Grounded':info.ready?'Vehicle Ready':'Check Submitted — Not Ready',sub:resultSub(info,true),buttons:{retry:false,next:true,back:false}});
+    return;
+  }
+  let msg=outcome.message||'The server did not confirm this check.';
+  if(msg.toLowerCase().indexOf('saved on this phone')===-1){
+    if(outcome.maybeLanded)msg+=' It is saved on this phone. Use Try again only if Fleet cannot see the check, so it is not recorded twice.';
+    else if(outcome.retryable===false)msg+=' It is saved on this phone.';
+    else if(/no signal/i.test(msg))msg+=' It is saved on this phone and will be sent again when there is a connection.';
+    else msg+=' It is saved on this phone and will be sent again.';
+  }
+  if(lastSave&&!lastSave.localOk&&!lastSave.idbOk)msg+=' Keep this page open. This phone could not store a copy that survives closing it.';
+  showResultScreen({ok:false,title:'Check not sent',sub:msg,buttons:{retry:true,next:false,back:true}});
+}
+
+function backToForm(){
+  formPaused=true;
+  document.getElementById('success-screen').classList.remove('show');
+  document.getElementById('main-form').style.display='';
+  document.getElementById('steps-bar').style.display='';
+  renderSteps();
+  const sb=document.getElementById('submit-btn');
+  if(sb){sb.textContent='Submit Check →';sb.disabled=false;}
+  window.scrollTo(0,0);
+}
+
+function buildPayload(){
+  Object.keys(checks).forEach(function(id){
+    const noteEl=document.getElementById('cdn-'+id);
+    if(noteEl)checks[id].note=noteEl.value.trim();
+  });
+  const photoArrays={};
+  let photoCount=0;
+  PHOTO_SECTIONS.forEach(function(section){
+    const list=(photos[section]||[]).filter(function(p){return typeof p==='string'&&p.indexOf('data:image/')===0;});
+    photoArrays[section]=list.slice();
+    photoCount+=list.length;
+  });
+  const now=new Date();
+  return {
+    checkId:currentCheckId,
+    vtoName:document.getElementById('vto-name').value.trim(),
+    vrn:getVRN(),
+    vehicleType:{'2crew':'2-Crew Ambulance',wav:'WAV',estate:'Estate / Green Car'}[vType],
+    odometer:document.getElementById('odo').value.trim(),
+    fuelLevel:document.getElementById('fuel').value,
+    handoverNotes:document.getElementById('handover-notes').value.trim(),
+    finalNotes:document.getElementById('final-notes').value.trim(),
+    vehicleReady:vehicleReady,
+    checks:JSON.parse(JSON.stringify(checks)),
+    photos:photoArrays,
+    signature:signatureDataUrl(),
+    photoCount:photoCount,
+    date:now.toLocaleDateString('en-GB'),
+    time:now.toLocaleTimeString('en-GB',{hour:'2-digit',minute:'2-digit'})
+  };
+}
+
+async function submitCheck(){
+  if(submitting)return;
+  const vto=document.getElementById('vto-name').value.trim();
+  const vrn=getVRN();
+  if(!vto){alert('Please enter your name.');return;}
+  if(!vrn){alert('Please select or enter the vehicle registration.');return;}
+  if(vehicleReady===null){alert('Please mark the vehicle as Ready or Not Ready.');return;}
+  if(!sigHasData){alert('Please sign to confirm the check.');return;}
+  if(!currentCheckId)currentCheckId=newCheckId();
+  formPaused=false;
+  const payload=buildPayload();
+  if(!payload.signature){alert('Please sign to confirm the check.');return;}
+  const record={
+    id:currentCheckId,
+    createdAt:Date.now(),
+    attempts:0,
+    lastAttempt:0,
+    lastError:'',
+    retryable:true,
+    legacyRecorded:false,
+    maybeLanded:false,
+    payload:payload
+  };
+  submitting=true;
+  const sb=document.getElementById('submit-btn');
+  if(sb){sb.textContent='Submitting...';sb.disabled=true;}
+  try{
+    const existing=memoryOnly&&memoryOnly.find(function(item){return item.id===record.id;});
+    if(existing&&existing.createdAt)record.createdAt=existing.createdAt;
+    await upsertPending(record);
+    const outcome=await withRecordLock(record,deliverAndUpdate);
+    if(!outcome||outcome.kind==='inflight')return;
+    present(outcome,record);
+  }catch(err){
+    present({kind:'failed',message:'Something went wrong before the check could be sent.',retryable:true},record);
+  }finally{
+    submitting=false;
+    if(sb){sb.textContent='Submit Check →';sb.disabled=false;}
+  }
+}
+
+async function retryActive(){
+  if(submitting||!activeResultId)return;
+  const all=await readAllPending();
+  const record=all.find(function(item){return item.id===activeResultId;});
+  if(!record)return;
+  record.retryable=true;
+  record.maybeLanded=false;
+  formPaused=false;
+  const btn=document.getElementById('result-retry');
+  if(btn){btn.disabled=true;btn.textContent='Sending...';}
+  submitting=true;
+  try{
+    await upsertPending(record);
+    const outcome=await withRecordLock(record,deliverAndUpdate);
+    if(!outcome||outcome.kind==='inflight')return;
+    present(outcome,record);
+  }catch(err){
+    present({kind:'failed',message:'The check could not be sent.',retryable:true},record);
+  }finally{
+    submitting=false;
+    if(btn){btn.disabled=false;btn.textContent='Try again';}
+  }
+}
+
+function resetAll(){currentCheckId=null;activeResultId=null;formPaused=false;submitting=false;step=0;vType=null;checks={};photos={};['checklist-handover','checklist-visual','checklist-clean','checklist-equip','checklist-mech'].forEach(id=>{const el=document.getElementById(id);if(el)el.innerHTML='';});vehicleReady=null;sigHasData=false;['vto-name','vrn-text','odo'].forEach(id=>document.getElementById(id).value='');document.getElementById('vrn-select').value='';document.getElementById('fuel').value='';document.getElementById('handover-notes').value='';document.getElementById('final-notes').value='';['2crew','wav','estate'].forEach(t=>document.getElementById('t-'+t).classList.remove('active'));document.querySelectorAll('.step-panel').forEach((p,i)=>p.classList.toggle('active',i===0));document.getElementById('success-screen').classList.remove('show');document.getElementById('main-form').style.display='';document.getElementById('nav-bar').style.display='';document.getElementById('steps-bar').style.display='';document.querySelectorAll('.photo-grid').forEach(g=>g.innerHTML='');document.getElementById('rb-yes').className='ready-btn';document.getElementById('rb-no').className='ready-btn';document.getElementById('fail-banner').style.display='none';document.getElementById('unsafe-warn').style.display='none';const retry=document.getElementById('result-retry');if(retry){retry.disabled=false;retry.textContent='Try again';}renderSteps();updateBanner();window.scrollTo(0,0);}
 
 // Safari + Chrome safe init
 var _appInited = false;
@@ -406,6 +1070,12 @@ function initApp() {
   _appInited = true;
   renderSteps();
   tick();
+  window.addEventListener('online', function () { flushPending({ reason: 'online' }); });
+  document.addEventListener('visibilitychange', function () {
+    if (document.visibilityState === 'visible') flushPending({ reason: 'visible' });
+  });
+  setInterval(function () { flushPending({ reason: 'timer' }); }, 60000);
+  loadFleetFile().then(function () { return flushPending({ reason: 'load' }); }).catch(function () {});
 }
 if (document.readyState === 'loading') {
   document.addEventListener('DOMContentLoaded', initApp);
